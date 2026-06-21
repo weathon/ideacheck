@@ -43,12 +43,12 @@ textarea{width:100%;min-height:84px;background:var(--panel);color:var(--text);bo
 button{background:var(--idea);color:#fff;border:0;border-radius:9px;padding:10px 18px;font-weight:600;cursor:pointer}
 button:disabled{opacity:.5;cursor:not-allowed}
 .statusline{color:var(--muted);font-size:13px}
-a.dl{color:#60a5fa;font-size:13px;margin-left:6px;display:none}
-#log{margin:0 0 20px;background:#0e1320;border:1px solid var(--line);border-radius:10px;padding:10px 14px;max-height:200px;overflow:auto;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+a.dl{color:var(--accent);font-size:13px;margin-left:6px;display:none}
+#log{margin:0 0 20px;background:#f7f8fa;border:1px solid var(--line);border-radius:10px;padding:10px 14px;max-height:200px;overflow:auto;color:#363c4a;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
 #log .ev{padding:1px 0;white-space:pre-wrap;word-break:break-word}
-#log .ev .t{display:inline-block;min-width:88px;color:var(--idea);font-weight:600}
-#log .ev.sub .t{color:#a78bfa} #log .ev.delegate .t{color:#f59e0b} #log .ev.tool .t{color:#22c55e}
-#log .ev.paper .t{color:#22d3ee} #log .ev.result .t{color:#e5e7eb} #log .ev.err .t{color:#ef4444}
+#log .ev .t{display:inline-block;min-width:88px;color:var(--accent);font-weight:600}
+#log .ev.sub .t{color:#7c3aed} #log .ev.delegate .t{color:#d97706} #log .ev.tool .t{color:#16a34a}
+#log .ev.paper .t{color:#0891b2} #log .ev.result .t{color:#475569} #log .ev.err .t{color:#dc2626}
 """
     + REPORT_CSS
     + """</style>
@@ -77,10 +77,11 @@ function logline(ev){
   if(ev.type==="text"){ cls+=ev.scope==="subagent"?" sub":""; t=ev.scope; body=ev.text; }
   else if(ev.type==="delegate"){ cls+=" delegate"; t="→ "+ev.agent; body=ev.task; }
   else if(ev.type==="tool"){ cls+=" tool"; t=ev.name.replace("mcp__axv__",""); body=JSON.stringify(ev.args||{}); }
+  else if(ev.type==="scope"){ t="proposal"; body=`${ev.proposal}  (contribution ${ev.contribution_weight}/100)`; }
   else if(ev.type==="paper"){ cls+=" paper"; t="analyzed"; body=`[${ev.overlap_score}/${ev.reading_value}] ${ev.title}`; }
   else if(ev.type==="final"){ t="synthesis"; body=`novelty ${ev.novelty_score} · ${ev.verdict}`; }
   else if(ev.type==="improvements"){ t="methods"; body=`${(ev.recommendations||[]).length} method suggestions`; }
-  else if(ev.type==="result"){ cls+=" result"; t="done"; body=`turns ${ev.turns} · $${(ev.cost_usd||0).toFixed(3)} · ${(ev.duration_ms/1000).toFixed(1)}s`; }
+  else if(ev.type==="result"){ cls+=" result"; t="done"; const c=(ev.cost_usd||0).toFixed(3); body=`turns ${ev.turns} · ${(ev.duration_ms/1000).toFixed(1)}s · ${ev.billed?("$"+c+" billed to ANTHROPIC_API_KEY"):("$"+c+" saved (equivalent API cost; $0 on your Claude subscription)")}`; }
   else if(ev.type==="start"){ t="start"; body=ev.run_dir; }
   else { body=JSON.stringify(ev); }
   d.className=cls; d.innerHTML=`<span class="t">${t}</span> `+escapeHtml(body);
@@ -96,6 +97,7 @@ $("run").onclick=()=>{
   es.onmessage=e=>{
     const ev=JSON.parse(e.data); logline(ev);
     if(ev.type==="start"){ V.setIdea(ev.idea,""); }
+    else if(ev.type==="scope"){ V.setScope(ev); $("status").textContent="scoped the proposal…"; }
     else if(ev.type==="paper"){ V.addPaper(ev); $("status").textContent=V.papers.length+" papers analyzed…"; }
     else if(ev.type==="final"){ V.setFinal(ev); $("status").textContent="synthesizing report…"; }
     else if(ev.type==="improvements"){ V.setImprovements(ev); $("status").textContent="method advice ready…"; }

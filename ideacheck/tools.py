@@ -217,6 +217,27 @@ def build_servers(axv, run_dir: Path):
 
     # ---------------------------------------------------------------- store
     @tool(
+        "save_scope",
+        "Persist the decomposition of the user's idea into the background it "
+        "assumes vs the part the user actually proposes. Call this FIRST, from "
+        "the user's own statement only (no literature lookup). Only the proposal "
+        "is evaluated for novelty downstream.",
+        {
+            "type": "object",
+            "properties": {
+                "background": {"type": "string", "description": "The part the user presents as given/existing background, NOT claimed as their contribution"},
+                "proposal": {"type": "string", "description": "The part that is actually the user's proposed contribution - the only part evaluated for novelty"},
+                "contribution_weight": {"type": "integer", "minimum": 0, "maximum": 100, "description": "How substantial the proposal is relative to the assumed background: 100 = the proposal is the bulk / a major new mechanism, low = a small tweak on a large existing foundation"},
+                "contribution_assessment": {"type": "string", "description": "Markdown rationale: is the proposed delta big enough to stand on its own relative to the background"},
+            },
+            "required": ["background", "proposal", "contribution_weight", "contribution_assessment"],
+        },
+    )
+    async def save_scope(args):
+        (run_dir / "scope.json").write_text(json.dumps(args, ensure_ascii=False, indent=2))
+        return {"content": [{"type": "text", "text": f"Saved scope (contribution_weight {args['contribution_weight']}). Proposal: {args['proposal'][:160]}"}]}
+
+    @tool(
         "save_paper_analysis",
         "Persist the structured overlap analysis of ONE paper vs the user's idea. "
         "Call exactly once per paper. overlap_score is 0-100 where 100 means the "
@@ -347,7 +368,7 @@ def build_servers(axv, run_dir: Path):
     store_server = create_sdk_mcp_server(
         name="store",
         version="0.1.0",
-        tools=[save_paper_analysis, read_all_analyses, save_final_report, save_improvements],
+        tools=[save_scope, save_paper_analysis, read_all_analyses, save_final_report, save_improvements],
     )
 
     return axv_server, store_server

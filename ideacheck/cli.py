@@ -47,6 +47,9 @@ def check(idea, idea_file, out_dir, open_report):
             elif t == "text":
                 tag = "subagent" if ev["scope"] == "subagent" else "main"
                 click.echo(click.style(f"  [{tag}] ", fg="magenta") + ev["text"].strip().replace("\n", "\n          "))
+            elif t == "scope":
+                click.echo(click.style("  proposal: ", fg="cyan", bold=True) + ev["proposal"])
+                click.echo(click.style(f"  contribution weight {ev['contribution_weight']}/100 ", fg="cyan") + "(proposal vs the background it assumes)")
             elif t == "paper":
                 click.echo(click.style(f"  analyzed overlap={ev['overlap_score']:>3} read={ev['reading_value']:>3} ", fg="cyan") + f"{ev['recommendation']}  {ev['title']}")
             elif t == "final":
@@ -54,7 +57,9 @@ def check(idea, idea_file, out_dir, open_report):
             elif t == "improvements":
                 click.echo(click.style(f"  method advice: {len(ev['recommendations'])} suggestions to improve the method", fg="cyan", bold=True))
             elif t == "result":
-                click.echo(click.style(f"done: {ev['turns']} turns · ${ev['cost_usd']:.3f} · {ev['duration_ms']/1000:.1f}s", fg="cyan"))
+                cost = ev["cost_usd"]
+                money = f"${cost:.3f} billed to ANTHROPIC_API_KEY" if ev["billed"] else f"${cost:.3f} saved (equivalent API cost; $0 on your Claude subscription)"
+                click.echo(click.style(f"done: {ev['turns']} turns · {ev['duration_ms']/1000:.1f}s · {money}", fg="cyan", bold=True))
 
     asyncio.run(drive())
 

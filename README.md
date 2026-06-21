@@ -1,10 +1,11 @@
 # ideacheck
 
 `ideacheck` is a multi-agent CLI + web GUI that takes a research idea, mines the
-[alphaXiv](https://www.alphaxiv.org) literature, and produces four things:
+[alphaXiv](https://www.alphaxiv.org) literature, and produces five things:
 
-1. **Novelty** — has someone already done this? a 0–100 score + verdict.
-2. **Differentiation** — concretely how your idea differs from / improves on the closest prior work (positioning).
+0. **Scope split** — first, from your own words (no lookup), it separates the **background** you assume from the part you actually **propose**, and rates how big the proposal is relative to that background (0–100). Novelty is then checked on the *proposal only*, so shared background doesn't count as overlap.
+1. **Novelty** — has someone already done the proposed part? a 0–100 score + verdict.
+2. **Differentiation** — concretely how the proposal differs from / improves on the closest prior work (positioning).
 3. **Recommended reading** — the papers you should actually read while writing, ranked by value to your paper (a baseline to compare, a method to cite/borrow) — *not* just by overlap.
 4. **Methods to add** — an in-depth (Opus) analysis of concrete techniques from the literature you could fold into your own method to make it stronger.
 
@@ -15,9 +16,9 @@ It renders all of this as an interactive D3 report, and is built on the
 ## How it works (multi-agent)
 
 ```
-orchestrator (agent model)     plans the run, then synthesizes the verdict + report
-  ├─ query-planner (agent)     idea → diverse searches → overlap candidates + read-worthy papers
-  ├─ paper-analyst (agent)     one paper → overlap score + reading value + similarities/differences
+orchestrator (agent model)     split idea → background vs proposal (no lookup), then coordinate + synthesize
+  ├─ query-planner (agent)     proposal → diverse searches → overlap candidates + read-worthy papers
+  ├─ paper-analyst (agent)     one paper → overlap (vs proposal) + reading value + similarities/differences
   │     └─ overview-generator (overview model)   makes + caches an overview when a paper has none
   ├─ method-advisor (improve model)   in-depth: methods to fold in to improve the idea
   └─ (synthesis)               read_all_analyses → save_final_report
@@ -65,10 +66,12 @@ pip install git+https://github.com/weathon/ideacheck.git
 **4. alphaXiv** needs no setup — search/paper/overview/similar endpoints are
 queried publicly, **no alphaXiv API key required**.
 
-> Cost: a run uses Opus (orchestrator) + Sonnet (subagents). A broad idea that
-> surfaces dozens of papers can cost a few dollars per run; a niche idea is
-> cheaper. Generated overviews are cached under `~/.ideacheck/overview_cache/`
-> and reused across runs.
+> Cost: a run uses Sonnet (agents) + Haiku (overviews) + one Opus pass (the
+> method-advisor). A broad idea that surfaces dozens of papers can cost a few
+> dollars per run; a niche idea is cheaper. The run prints its cost at the end —
+> shown as **saved** (the equivalent API cost, $0 on a Claude subscription) or
+> **billed** (when `ANTHROPIC_API_KEY` is set). Generated overviews are cached
+> under `~/.ideacheck/overview_cache/` and reused across runs.
 
 ## Usage
 
@@ -98,6 +101,7 @@ and the novelty gauge + synthesis fill in once the orchestrator wraps up.
 
 The HTML report (interactive, D3-powered) shows:
 
+- **"What you're actually proposing"** — the background-vs-proposal split and a contribution-size bar,
 - a **novelty gauge** (0–100) and verdict (novel / incremental / substantially covered / likely duplicated),
 - a **"How your idea differs from prior work"** positioning section,
 - a **force-directed similarity network** (idea at the center, each paper sized & pulled in by its overlap score) and an **overlap bar chart**,

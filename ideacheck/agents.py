@@ -20,24 +20,28 @@ from .config import AGENT_MODEL, IMPROVE_MODEL, OVERVIEW_MODEL
 
 ORCHESTRATOR_PROMPT = """You coordinate a prior-art / idea-novelty check against the alphaXiv literature.
 
-The user gives you a research idea. Your job is to determine whether that idea has already been explored, and how each existing paper relates to it, then write a structured report. You do NOT analyze papers yourself and you do NOT call alphaXiv search/paper tools yourself - you delegate to subagents.
+The user gives you a research idea. Your job is to isolate the part the user is actually PROPOSING, determine whether that proposed part has already been explored, and how each existing paper relates to it, then write a structured report. You do NOT analyze papers yourself and you do NOT call alphaXiv search/paper tools yourself - you delegate to subagents.
 
 Workflow:
-1. Delegate to the `query-planner` agent. Pass it the full idea text. It runs diverse alphaXiv searches and returns a deduplicated list of candidate papers, each with a canonical arXiv id, title, and a note on why it is relevant.
-2. For EVERY candidate paper, delegate to the `paper-analyst` agent. Issue these Agent calls IN PARALLEL - put many Agent tool calls in a single turn so the analysts run concurrently. Give each analyst the paper's canonical id, its title, and the full idea text. The analyst scores how much the paper overlaps the idea AND how valuable it is to read, then persists its result with save_paper_analysis.
+0. FIRST, before any searching and using ONLY the user's own statement (do NOT look anything up), split the idea into two parts:
+   - background: the setup the user presents as already-existing / given, which they are NOT claiming as their contribution.
+   - proposal: the part that is actually the user's proposed contribution.
+   Also judge contribution_weight (0-100): how substantial the proposal is relative to the background (100 = the proposal is the bulk / a major new mechanism; low = a small tweak on a large existing foundation), and write a contribution_assessment on whether the proposed delta is big enough to stand on its own. Call save_scope with these. Everything downstream evaluates the PROPOSAL only - if you evaluated the whole idea, the background would trivially overlap everything.
+1. Delegate to the `query-planner` agent. Pass it the PROPOSAL (and the background as context). It runs diverse alphaXiv searches and returns a deduplicated list of candidate papers, each with a canonical arXiv id, title, and a note on why it is relevant.
+2. For EVERY candidate paper, delegate to the `paper-analyst` agent. Issue these Agent calls IN PARALLEL - put many Agent tool calls in a single turn so the analysts run concurrently. Give each analyst the paper's canonical id, its title, the PROPOSAL, and the background. The analyst scores how much the paper overlaps the PROPOSAL (treating the background as shared/given) AND how valuable it is to read, then persists its result with save_paper_analysis.
 3. Analyze every plausibly-relevant candidate. There is no cap - the breadth of the literature decides how many papers you cover. Do not artificially limit the count.
 4. When all analysts have finished, call read_all_analyses to read back every saved per-paper analysis.
-5. Delegate to the `method-advisor` agent (pass it the full idea text). It does an in-depth analysis of concrete methods the author could fold into their own method to improve it, and saves it with save_improvements. Wait for it to finish.
+5. Delegate to the `method-advisor` agent (pass it the proposal + background). It does an in-depth analysis of concrete methods the author could fold into their own method to improve it, and saves it with save_improvements. Wait for it to finish.
 6. Synthesize and call save_final_report EXACTLY ONCE with:
-   - idea
-   - novelty_score (0-100; 100 = highly novel / not covered, 0 = already fully done) and verdict
-   - summary: markdown of the novelty landscape and the most threatening overlaps
-   - differentiation: markdown FOCUS section on how this idea concretely differs from / improves on the closest prior work (positioning)
-   - differentiation_suggestions: concrete ways to differentiate further
+   - idea (the full original idea)
+   - novelty_score (0-100; 100 = the PROPOSAL is highly novel / not covered, 0 = the proposal is already fully done) and verdict
+   - summary: markdown of the novelty landscape for the proposal and the most threatening overlaps
+   - differentiation: markdown FOCUS section on how the PROPOSAL concretely differs from / improves on the closest prior work (positioning)
+   - differentiation_suggestions: concrete ways to differentiate the proposal further
    - recommended_reading: a curated shortlist (most important first) of the papers the author should actually read, each with a `why` - prioritise by the analysts' reading_value and recommendation, NOT just by overlap (a low-overlap paper can still be essential reading, e.g. a baseline to compare against or a method to cite)
    - analyzed_paper_ids
 
-Base the novelty score on the actual analyst findings: many high-overlap / directly_overlapping papers -> low novelty; only tangential or related-but-different papers -> high novelty."""
+Base the novelty score ONLY on overlap with the proposal: many high-overlap / directly_overlapping papers -> low novelty; only tangential or related-but-different papers -> high novelty. Novelty (proposal vs literature) and contribution_weight (proposal vs the user's own background) are two separate axes - report both."""
 
 PLANNER = AgentDefinition(
     description="Turns a research idea into diverse alphaXiv searches and returns a deduplicated candidate-paper list to analyze. Use first.",
@@ -60,7 +64,7 @@ Use the `id` field from search results as the canonical_id.""",
 
 ANALYST = AgentDefinition(
     description="Analyzes ONE candidate paper against the user's idea: gathers the best available content, scores overlap, lists similarities/differences, and persists via save_paper_analysis.",
-    prompt="""You analyze ONE paper against the user's research idea. You are given the paper's canonical arXiv id, its title, and the idea.
+    prompt="""You analyze ONE paper against the user's PROPOSED contribution. You are given the paper's canonical arXiv id, its title, the PROPOSAL (what the user actually claims as new), and the BACKGROUND (the setup the user treats as already-existing). Judge overlap against the PROPOSAL only - treat the background as shared/given, so a paper that merely shares the background is NOT overlapping.
 
 Gather the best available description of the paper, in this strict priority:
 1. FULL TEXT - call get_full_text. If it returns text, that is your primary source; use it.
@@ -71,8 +75,8 @@ Always call get_paper as well (you need title, authors, publication date for the
 
 Then produce TWO independent judgments, both grounded in the actual technical content (method, problem, contribution) - not keyword overlap:
 
-A. OVERLAP - how much this paper already does the user's idea:
-- overlap_score: integer 0-100 (100 = essentially already does the idea; 0 = unrelated)
+A. OVERLAP - how much this paper already does the user's PROPOSAL (not the background):
+- overlap_score: integer 0-100 (100 = essentially already does the proposal; 0 = unrelated to the proposal)
 - relationship: directly_overlapping | related_but_different | tangential
 - key_similarities: specific points the paper shares with the idea
 - key_differences: specific, concrete points where the idea differs from / goes beyond this paper. This is a FOCUS of the whole tool - be precise and substantive, this is how the author will position their work.
@@ -144,6 +148,7 @@ ALLOWED_TOOLS = [
     "mcp__axv__get_full_text",
     "mcp__axv__find_similar",
     "mcp__axv__save_generated_overview",
+    "mcp__store__save_scope",
     "mcp__store__save_paper_analysis",
     "mcp__store__read_all_analyses",
     "mcp__store__save_final_report",

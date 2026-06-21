@@ -12,6 +12,7 @@ crash mid-run still leaves every finished paper in <run_dir>/papers/.
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -79,6 +80,8 @@ async def run_idea_check(idea: str, run_dir: Path):
                                 "agent": block.input.get("subagent_type") or "subagent",
                                 "task": (block.input.get("description") or block.input.get("prompt", ""))[:200],
                             }
+                        elif block.name == "mcp__store__save_scope":
+                            yield {"type": "scope", **block.input}
                         elif block.name == "mcp__store__save_paper_analysis":
                             # the analysis IS the tool input -> stream it so the UI
                             # can drop the paper's node into the graph in real time
@@ -98,4 +101,7 @@ async def run_idea_check(idea: str, run_dir: Path):
                     "cost_usd": message.total_cost_usd,
                     "turns": message.num_turns,
                     "duration_ms": message.duration_ms,
+                    # billed = a real API key is paying; otherwise the cost is what a
+                    # Claude subscription saved you versus the API
+                    "billed": "ANTHROPIC_API_KEY" in os.environ,
                 }
