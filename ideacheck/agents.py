@@ -41,13 +41,15 @@ Workflow:
    - recommended_reading: a curated shortlist (most important first) of the papers the author should actually read, each with a `why` - prioritise by the analysts' reading_value and recommendation, NOT just by overlap (a low-overlap paper can still be essential reading, e.g. a baseline to compare against or a method to cite)
    - analyzed_paper_ids
 
-Base the novelty score ONLY on overlap with the proposal: many high-overlap / directly_overlapping papers -> low novelty; only tangential or related-but-different papers -> high novelty. Novelty (proposal vs literature) and contribution_weight (proposal vs the user's own background) are two separate axes - report both."""
+Base the novelty score ONLY on overlap with the proposal: many high-overlap / directly_overlapping papers -> low novelty; only tangential or related-but-different papers -> high novelty. Count ABSTRACT / cross-domain analogs too: a proposal that is an existing idea or mechanism ported to a new domain or modality is NOT highly novel even if no paper shares its surface domain - weight such analogs in the novelty score and call them out in the summary. Novelty (proposal vs literature) and contribution_weight (proposal vs the user's own background) are two separate axes - report both."""
 
 PLANNER = AgentDefinition(
     description="Turns a research idea into diverse alphaXiv searches and returns a deduplicated candidate-paper list to analyze. Use first.",
     prompt="""You are a literature-search strategist. You receive a research idea.
 
 Generate several distinct search angles for it: the core method/technique, the problem it solves, the application domain, and alternative terminology the field might use. Use `closest_topics` to discover the vocabulary the literature actually uses, then run `search_papers` for each angle. You may also use `find_similar` on a strongly-matching paper to widen the net.
+
+ALSO search at a higher level of ABSTRACTION, not just for surface matches. Strip the idea down to its underlying pattern or mechanism - what it fundamentally does, independent of the specific domain, modality, data type, or application - and run explicit searches for that abstract pattern in OTHER domains and modalities. The same core idea applied elsewhere (e.g. the same mechanism done for images when the idea is about text, the same trick in a different field, the same effect for a different task) is highly relevant prior art even when it shares no surface keywords. Deliberately look for these cross-domain / analogical matches.
 
 Find two kinds of papers:
 1. OVERLAP candidates - papers that may already do part of the idea (for the novelty check).
@@ -77,7 +79,11 @@ Always call get_paper as well (you need title, authors, publication date for the
 
 Then produce TWO independent judgments, both grounded in the actual technical content (method, problem, contribution) - not keyword overlap:
 
-A. OVERLAP - how much this paper already does the user's PROPOSAL (not the background):
+Judge overlap at BOTH levels, not just surface matching:
+- SPECIFIC: same method/domain/task as the proposal.
+- ABSTRACT / ANALOGICAL: is this paper the same underlying idea or mechanism applied to a DIFFERENT domain, modality, or task? A cross-domain analog - e.g. the same trick done for images when the proposal is about text, or the same effect studied in another field - is real prior art. Score it as a genuine overlap and say so explicitly in key_similarities and one_line ("same idea as X, applied to <other domain>"). Do NOT give a low overlap just because the surface domain or wording differs.
+
+A. OVERLAP - how much this paper already does the user's PROPOSAL (specifically OR as an abstract analog), not the background:
 - overlap_score: integer 0-100 (100 = essentially already does the proposal; 0 = unrelated to the proposal)
 - relationship: directly_overlapping | related_but_different | tangential
 - key_similarities: specific points the paper shares with the idea
