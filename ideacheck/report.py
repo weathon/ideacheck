@@ -60,6 +60,17 @@ tr.row{cursor:pointer} tr.row:hover{background:#0f1726}
 .taglist{margin:6px 0 0;padding-left:18px} .taglist li{margin:4px 0}
 .relbadge{display:inline-block;padding:3px 9px;border-radius:6px;font-size:12px;font-weight:600;color:#0b0f17}
 .src{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+.reading-row{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.reading-row:hover{background:#0f1726}
+.read-pill{flex:none;min-width:30px;text-align:center;padding:2px 7px;border-radius:6px;font-weight:700;font-size:12px;background:#0e7490;color:#e0f2fe}
+.recbadge{flex:none;display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;color:#0b0f17;white-space:nowrap}
+.reading-row .meta2{flex:1;min-width:0}
+.reading-row .ttl{color:#e5e7eb} .reading-row .why{color:var(--muted);font-size:12.5px;margin-top:2px}
+.pick{color:#fde68a;font-weight:700;font-size:11px;margin-left:6px}
+.impr{border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0;background:var(--panel2)}
+.impr h3{margin:0 0 4px;font-size:15px;color:#93c5fd}
+.impr .lbl{color:var(--muted);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:9px}
+.impr p{margin:3px 0} .impr .srcs{margin-top:9px;font-size:12px}
 """
 
 # DOM skeleton, shared by the static report and the GUI. Same element ids that
@@ -79,6 +90,11 @@ REPORT_BODY = r"""
     </div>
   </div>
 
+  <div class="card" id="diff-card" style="display:none">
+    <h2>How your idea differs from prior work</h2>
+    <div class="summary" id="differentiation"></div>
+  </div>
+
   <div class="card">
     <h2>Similarity network <span class="muted" id="meta" style="font-weight:400;font-size:13px"></span></h2>
     <div class="legend">
@@ -96,15 +112,26 @@ REPORT_BODY = r"""
     <svg id="bars" width="100%"></svg>
   </div>
 
+  <div class="card" id="reading-card">
+    <h2>Recommended reading <span class="muted" style="font-weight:400;font-size:13px">— papers worth reading, ranked by value to your paper (not just overlap)</span></h2>
+    <div id="reading"><span class="muted">waiting for analyses…</span></div>
+  </div>
+
+  <div class="card" id="improve-card" style="display:none">
+    <h2>Methods to consider adding <span class="muted" style="font-weight:400;font-size:13px">— in-depth analysis</span></h2>
+    <div class="summary" id="improve-analysis"></div>
+    <div id="improvements"></div>
+  </div>
+
   <div class="card" id="sugg-card" style="display:none">
-    <h2>How to differentiate</h2>
+    <h2>How to differentiate further</h2>
     <ul class="suggestions" id="suggestions"></ul>
   </div>
 
   <div class="card">
     <h2>All analyzed papers</h2>
     <table id="table"><thead><tr>
-      <th data-k="overlap_score">Overlap</th><th data-k="title">Title</th>
+      <th data-k="overlap_score">Overlap</th><th data-k="reading_value">Read</th><th data-k="title">Title</th>
       <th data-k="relationship">Relationship</th><th data-k="year">Year</th><th>Source</th>
     </tr></thead><tbody></tbody></table>
   </div>
@@ -120,6 +147,16 @@ const REL = {
 };
 const relColor = r => (REL[r]||{c:"#6b7280"}).c;
 const relText  = r => (REL[r]||{t:r||"unknown"}).t;
+const REC = {
+  closest_prior_work:{c:"#ef4444",t:"Closest prior work"},
+  baseline_to_compare:{c:"#f59e0b",t:"Baseline to compare"},
+  foundational_to_cite:{c:"#60a5fa",t:"Foundational — cite"},
+  method_to_borrow:{c:"#c4b5fd",t:"Method to borrow"},
+  background_context:{c:"#9ca3af",t:"Background"},
+  optional:{c:"#6b7280",t:"Optional"}
+};
+const recColor = r => (REC[r]||{c:"#9ca3af"}).c;
+const recText  = r => (REC[r]||{t:r||""}).t;
 const scoreColor = d3.scaleSequential(d3.interpolateRdYlGn).domain([0,100]);
 function verdictBadge(v){
   const m={novel:{c:"#22c55e",t:"Novel"},incremental:{c:"#f59e0b",t:"Incremental"},
@@ -130,7 +167,7 @@ function escapeHtml(s){return (s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&"
 
 class IdeaCheckView {
   constructor(){
-    this.papers=[]; this.byId={}; this._slug="";
+    this.papers=[]; this.byId={}; this._slug=""; this._recommended={};
     this.nodes=[{id:"__idea__",idea:true}]; this.links=[];
     const svg=d3.select("#graph");
     this.W=svg.node().clientWidth||1100; this.H=560;
@@ -166,7 +203,7 @@ class IdeaCheckView {
     this.byId[p.id]=p; this.papers.push(p);
     this.nodes.push(Object.assign({id:p.id},p));
     this.links.push({source:"__idea__",target:p.id,score:p.overlap_score});
-    this.updateGraph(); this.renderBars(); this.renderTable(); this.renderCounts(); this.renderMeta();
+    this.updateGraph(); this.renderBars(); this.renderTable(); this.renderCounts(); this.renderReading(); this.renderMeta();
   }
 
   updateGraph(){
@@ -229,11 +266,51 @@ class IdeaCheckView {
     rows.forEach(p=>{
       const tr=tb.append("tr").attr("class","row").on("click",()=>self.openPaper(p.id));
       tr.append("td").html(`<span class="score-pill" style="background:${scoreColor(p.overlap_score)}">${p.overlap_score}</span>`);
+      tr.append("td").html(`<span class="read-pill">${p.reading_value==null?"":p.reading_value}</span>`);
       tr.append("td").text(p.title||"");
       tr.append("td").html(`<span class="relbadge" style="background:${relColor(p.relationship)}">${relText(p.relationship)}</span>`);
       tr.append("td").text(p.year||"");
       tr.append("td").html(`<span class="src">${p.evidence_source||""}</span>`);
     });
+  }
+
+  renderReading(){
+    const ps=this.papers.slice().sort((a,b)=>(b.reading_value||0)-(a.reading_value||0));
+    const el=document.getElementById("reading"); el.innerHTML="";
+    if(!ps.length){ el.innerHTML="<span class='muted'>waiting for analyses…</span>"; return; }
+    const self=this;
+    ps.forEach(p=>{
+      const pick=self._recommended[p.id];
+      const row=document.createElement("div"); row.className="reading-row";
+      row.onclick=()=>self.openPaper(p.id);
+      row.innerHTML=`<span class="read-pill">${p.reading_value==null?"?":p.reading_value}</span>`
+        +`<span class="recbadge" style="background:${recColor(p.recommendation)}">${recText(p.recommendation)}</span>`
+        +`<div class="meta2"><div class="ttl">${escapeHtml(p.title||"")}`
+        +(pick?` <span class="pick">★ top pick</span>`:``)+`</div>`
+        +`<div class="why">${escapeHtml(pick||p.why_read||"")}</div></div>`;
+      el.appendChild(row);
+    });
+  }
+
+  setImprovements(imp){
+    if(!imp)return;
+    document.getElementById("improve-analysis").innerHTML=marked.parse(imp.analysis||"");
+    const el=document.getElementById("improvements"); el.innerHTML="";
+    const self=this;
+    (imp.recommendations||[]).forEach(r=>{
+      const srcs=(r.source_paper_ids||[]).map(id=>{
+        const p=self.byId[id];
+        return `<a href="${p?p.url:("https://www.alphaxiv.org/abs/"+id)}" target="_blank" rel="noopener">${escapeHtml(p?p.title:id)}</a>`;
+      }).join(" · ");
+      const d=document.createElement("div"); d.className="impr";
+      d.innerHTML=`<h3>${escapeHtml(r.title||"")}</h3>`
+        +`<div class="lbl">what it is</div><p>${escapeHtml(r.technique||"")}</p>`
+        +`<div class="lbl">why it helps your idea</div><p>${escapeHtml(r.why_it_helps||"")}</p>`
+        +`<div class="lbl">how to integrate</div><p>${escapeHtml(r.how_to_integrate||"")}</p>`
+        +(srcs?`<div class="srcs"><span class="muted">from:</span> ${srcs}</div>`:``);
+      el.appendChild(d);
+    });
+    document.getElementById("improve-card").style.display=(imp.recommendations||[]).length?"":"none";
   }
 
   renderCounts(){
@@ -260,9 +337,16 @@ class IdeaCheckView {
     const vb=verdictBadge(f.verdict);
     document.getElementById("verdict").innerHTML=`<span class="verdict" style="background:${vb.c}22;color:${vb.c};border:1px solid ${vb.c}">${vb.t}</span>`;
     document.getElementById("summary").innerHTML=marked.parse(f.summary||"");
+    if(f.differentiation){
+      document.getElementById("differentiation").innerHTML=marked.parse(f.differentiation);
+      document.getElementById("diff-card").style.display="";
+    }
     const sug=document.getElementById("suggestions"); sug.innerHTML="";
     (f.differentiation_suggestions||[]).forEach(s=>{const li=document.createElement("li");li.textContent=s;sug.appendChild(li);});
     document.getElementById("sugg-card").style.display=(f.differentiation_suggestions||[]).length?"":"none";
+    this._recommended={};
+    (f.recommended_reading||[]).forEach(r=>{this._recommended[r.paper_id]=r.why;});
+    this.renderReading();
   }
 
   openPaper(id){
@@ -272,10 +356,12 @@ class IdeaCheckView {
       <h3>${escapeHtml(p.title||"")}</h3>
       <div class="kv"><span class="relbadge" style="background:${relColor(p.relationship)}">${relText(p.relationship)}</span>
         &nbsp;<span class="score-pill" style="background:${scoreColor(p.overlap_score)}">${p.overlap_score}</span> overlap
+        &nbsp;<span class="read-pill">${p.reading_value==null?"?":p.reading_value}</span> read
         &nbsp;<span class="src">judged from ${p.evidence_source||"?"}</span></div>
       <div class="kv"><b>Authors</b>${escapeHtml((p.authors||[]).join(", "))||"<span class='muted'>n/a</span>"}</div>
       <div class="kv"><b>Year</b>${escapeHtml(p.year||"n/a")} &nbsp; <a href="${p.url}" target="_blank" rel="noopener">open on alphaXiv ↗</a></div>
       <div class="kv"><b>In one line</b>${escapeHtml(p.one_line||"")}</div>
+      <div class="kv"><b>Why read it</b><span class="recbadge" style="background:${recColor(p.recommendation)}">${recText(p.recommendation)}</span> ${escapeHtml(p.why_read||"")}</div>
       <div class="kv"><b>Key similarities</b>${lis(p.key_similarities)}</div>
       <div class="kv"><b>Key differences</b>${lis(p.key_differences)}</div>`;
     document.getElementById("panel").classList.add("open");
@@ -316,6 +402,7 @@ const V = new IdeaCheckView();
 V.setIdea(DATA.idea, DATA.slug);
 (DATA.papers||[]).forEach(p=>V.addPaper(p));
 V.setFinal(DATA);
+V.setImprovements(DATA.improvements);
 </script>
 </body>
 </html>
@@ -328,6 +415,8 @@ def build_report_html(run_dir: Path) -> Path:
     report = json.loads((run_dir / "report.json").read_text())
     meta = json.loads((run_dir / "meta.json").read_text())
     papers = [json.loads(f.read_text()) for f in sorted((run_dir / "papers").glob("*.json"))]
+    improvements_file = run_dir / "improvements.json"
+    improvements = json.loads(improvements_file.read_text()) if improvements_file.exists() else None
 
     data = {
         "idea": report["idea"],
@@ -335,8 +424,11 @@ def build_report_html(run_dir: Path) -> Path:
         "novelty_score": report["novelty_score"],
         "verdict": report["verdict"],
         "summary": report["summary"],
+        "differentiation": report["differentiation"],
         "differentiation_suggestions": report["differentiation_suggestions"],
+        "recommended_reading": report["recommended_reading"],
         "papers": papers,
+        "improvements": improvements,
     }
     blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     html = REPORT_TEMPLATE.replace("__IDEACHECK_DATA__", blob)

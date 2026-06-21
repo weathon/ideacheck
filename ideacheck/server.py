@@ -77,8 +77,9 @@ function logline(ev){
   if(ev.type==="text"){ cls+=ev.scope==="subagent"?" sub":""; t=ev.scope; body=ev.text; }
   else if(ev.type==="delegate"){ cls+=" delegate"; t="→ "+ev.agent; body=ev.task; }
   else if(ev.type==="tool"){ cls+=" tool"; t=ev.name.replace("mcp__axv__",""); body=JSON.stringify(ev.args||{}); }
-  else if(ev.type==="paper"){ cls+=" paper"; t="analyzed"; body=`[${ev.overlap_score}] ${ev.title}`; }
+  else if(ev.type==="paper"){ cls+=" paper"; t="analyzed"; body=`[${ev.overlap_score}/${ev.reading_value}] ${ev.title}`; }
   else if(ev.type==="final"){ t="synthesis"; body=`novelty ${ev.novelty_score} · ${ev.verdict}`; }
+  else if(ev.type==="improvements"){ t="methods"; body=`${(ev.recommendations||[]).length} method suggestions`; }
   else if(ev.type==="result"){ cls+=" result"; t="done"; body=`turns ${ev.turns} · $${(ev.cost_usd||0).toFixed(3)} · ${(ev.duration_ms/1000).toFixed(1)}s`; }
   else if(ev.type==="start"){ t="start"; body=ev.run_dir; }
   else { body=JSON.stringify(ev); }
@@ -97,6 +98,7 @@ $("run").onclick=()=>{
     if(ev.type==="start"){ V.setIdea(ev.idea,""); }
     else if(ev.type==="paper"){ V.addPaper(ev); $("status").textContent=V.papers.length+" papers analyzed…"; }
     else if(ev.type==="final"){ V.setFinal(ev); $("status").textContent="synthesizing report…"; }
+    else if(ev.type==="improvements"){ V.setImprovements(ev); $("status").textContent="method advice ready…"; }
     else if(ev.type==="report"){ $("dl").href=ev.url; $("dl").style.display="inline"; $("status").textContent="report ready"; }
     else if(ev.type==="result"){ $("run").disabled=false; es.close(); }
   };

@@ -235,15 +235,27 @@ def build_servers(axv, run_dir: Path):
                     "enum": ["directly_overlapping", "related_but_different", "tangential"],
                 },
                 "key_similarities": {"type": "array", "items": {"type": "string"}},
-                "key_differences": {"type": "array", "items": {"type": "string"}},
+                "key_differences": {"type": "array", "items": {"type": "string"}, "description": "Specific ways the idea differs from / goes beyond this paper (the differentiation focus)"},
                 "one_line": {"type": "string", "description": "One-sentence relation to the idea"},
+                "reading_value": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100,
+                    "description": "How valuable it is for the author to READ this paper when writing their own (independent of overlap): 100 = essential reading, 0 = no need to read",
+                },
+                "recommendation": {
+                    "type": "string",
+                    "enum": ["closest_prior_work", "baseline_to_compare", "foundational_to_cite", "method_to_borrow", "background_context", "optional"],
+                    "description": "This paper's role for the author writing the paper",
+                },
+                "why_read": {"type": "string", "description": "One sentence: why (or why not) the author should read this paper"},
                 "evidence_source": {
                     "type": "string",
                     "enum": ["full_text", "overview", "abstract"],
                     "description": "Which source the judgment was based on",
                 },
             },
-            "required": ["paper_id", "title", "url", "authors", "year", "overlap_score", "relationship", "key_similarities", "key_differences", "one_line", "evidence_source"],
+            "required": ["paper_id", "title", "url", "authors", "year", "overlap_score", "relationship", "key_similarities", "key_differences", "one_line", "reading_value", "recommendation", "why_read", "evidence_source"],
         },
     )
     async def save_paper_analysis(args):
@@ -275,21 +287,67 @@ def build_servers(axv, run_dir: Path):
                     "type": "string",
                     "enum": ["novel", "incremental", "substantially_covered", "likely_duplicated"],
                 },
-                "summary": {"type": "string", "description": "Markdown synthesis of the findings"},
-                "differentiation_suggestions": {"type": "array", "items": {"type": "string"}},
+                "summary": {"type": "string", "description": "Markdown synthesis of the novelty landscape and the most threatening overlaps"},
+                "differentiation": {"type": "string", "description": "Markdown, a focus section: how the idea concretely differs from / improves on the closest prior work (positioning)"},
+                "differentiation_suggestions": {"type": "array", "items": {"type": "string"}, "description": "Concrete ways the author could differentiate the idea further"},
+                "recommended_reading": {
+                    "type": "array",
+                    "description": "Curated shortlist of the most important papers the author should actually read, most important first",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "paper_id": {"type": "string"},
+                            "why": {"type": "string", "description": "Why this paper is essential reading for the author"},
+                        },
+                        "required": ["paper_id", "why"],
+                    },
+                },
                 "analyzed_paper_ids": {"type": "array", "items": {"type": "string"}},
             },
-            "required": ["idea", "novelty_score", "verdict", "summary", "differentiation_suggestions", "analyzed_paper_ids"],
+            "required": ["idea", "novelty_score", "verdict", "summary", "differentiation", "differentiation_suggestions", "recommended_reading", "analyzed_paper_ids"],
         },
     )
     async def save_final_report(args):
         (run_dir / "report.json").write_text(json.dumps(args, ensure_ascii=False, indent=2))
         return {"content": [{"type": "text", "text": f"Saved final report (novelty {args['novelty_score']}, verdict {args['verdict']})."}]}
 
+    @tool(
+        "save_improvements",
+        "Persist the in-depth method-improvement analysis: concrete methods / "
+        "techniques from the literature the author could fold into their own "
+        "method to improve it. Call exactly once.",
+        {
+            "type": "object",
+            "properties": {
+                "idea": {"type": "string"},
+                "analysis": {"type": "string", "description": "Markdown overview of the improvement opportunities"},
+                "recommendations": {
+                    "type": "array",
+                    "description": "Concrete methods/techniques to consider adding, most impactful first",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string", "description": "Short name of the method/technique"},
+                            "technique": {"type": "string", "description": "What it is / how it works, in depth"},
+                            "why_it_helps": {"type": "string", "description": "Why adding it would improve THIS idea specifically"},
+                            "how_to_integrate": {"type": "string", "description": "Concrete guidance on folding it into the author's method"},
+                            "source_paper_ids": {"type": "array", "items": {"type": "string"}, "description": "Canonical ids of the papers this method comes from"},
+                        },
+                        "required": ["title", "technique", "why_it_helps", "how_to_integrate", "source_paper_ids"],
+                    },
+                },
+            },
+            "required": ["idea", "analysis", "recommendations"],
+        },
+    )
+    async def save_improvements(args):
+        (run_dir / "improvements.json").write_text(json.dumps(args, ensure_ascii=False, indent=2))
+        return {"content": [{"type": "text", "text": f"Saved {len(args['recommendations'])} method-improvement recommendations."}]}
+
     store_server = create_sdk_mcp_server(
         name="store",
         version="0.1.0",
-        tools=[save_paper_analysis, read_all_analyses, save_final_report],
+        tools=[save_paper_analysis, read_all_analyses, save_final_report, save_improvements],
     )
 
     return axv_server, store_server

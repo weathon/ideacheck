@@ -85,6 +85,8 @@ async def run_idea_check(idea: str, run_dir: Path):
                             yield {"type": "paper", **block.input}
                         elif block.name == "mcp__store__save_final_report":
                             yield {"type": "final", **block.input}
+                        elif block.name == "mcp__store__save_improvements":
+                            yield {"type": "improvements", **block.input}
                         else:
                             keys = ("query", "paper_id")
                             args = {k: block.input[k] for k in keys if k in block.input}

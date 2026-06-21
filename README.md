@@ -1,25 +1,31 @@
 # ideacheck
 
-**Has someone already done your idea?** `ideacheck` is a multi-agent CLI + web GUI
-that checks a research idea against the [alphaXiv](https://www.alphaxiv.org)
-literature, explains how each existing paper is similar to and different from your
-idea, and renders an interactive D3 report.
+`ideacheck` is a multi-agent CLI + web GUI that takes a research idea, mines the
+[alphaXiv](https://www.alphaxiv.org) literature, and produces four things:
 
-It is built on the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
-and the [`alphaxiv-py`](https://github.com/petroslamb/alphaxiv-py) client.
+1. **Novelty** — has someone already done this? a 0–100 score + verdict.
+2. **Differentiation** — concretely how your idea differs from / improves on the closest prior work (positioning).
+3. **Recommended reading** — the papers you should actually read while writing, ranked by value to your paper (a baseline to compare, a method to cite/borrow) — *not* just by overlap.
+4. **Methods to add** — an in-depth (Opus) analysis of concrete techniques from the literature you could fold into your own method to make it stronger.
+
+It renders all of this as an interactive D3 report, and is built on the
+[Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview) and the
+[`alphaxiv-py`](https://github.com/petroslamb/alphaxiv-py) client.
 
 ## How it works (multi-agent)
 
 ```
 orchestrator (agent model)     plans the run, then synthesizes the verdict + report
-  ├─ query-planner (agent)     idea → diverse alphaXiv searches → candidate papers
-  ├─ paper-analyst (agent)     one paper → overlap score + similarities/differences
+  ├─ query-planner (agent)     idea → diverse searches → overlap candidates + read-worthy papers
+  ├─ paper-analyst (agent)     one paper → overlap score + reading value + similarities/differences
   │     └─ overview-generator (overview model)   makes + caches an overview when a paper has none
+  ├─ method-advisor (improve model)   in-depth: methods to fold in to improve the idea
   └─ (synthesis)               read_all_analyses → save_final_report
 ```
 
-By default the agents run on **Sonnet** and the overview-generator on **Haiku**
-(both configurable — see [Configuration](#configuration)).
+By default the agents run on **Sonnet**, the overview-generator on **Haiku**, and
+the in-depth method-advisor on **Opus** (all configurable — see
+[Configuration](#configuration)).
 
 The orchestrator delegates each candidate paper to a `paper-analyst` subagent (run
 in parallel). Each analyst gathers the best available evidence in priority order —
@@ -93,9 +99,11 @@ and the novelty gauge + synthesis fill in once the orchestrator wraps up.
 The HTML report (interactive, D3-powered) shows:
 
 - a **novelty gauge** (0–100) and verdict (novel / incremental / substantially covered / likely duplicated),
-- a **force-directed similarity network** with your idea at the center and each paper sized & pulled in by its overlap score,
-- an **overlap bar chart**, a sortable **paper table**, and a click-through detail panel with each paper's key similarities and differences,
-- the orchestrator's **synthesis** and concrete **differentiation suggestions**.
+- a **"How your idea differs from prior work"** positioning section,
+- a **force-directed similarity network** (idea at the center, each paper sized & pulled in by its overlap score) and an **overlap bar chart**,
+- a **Recommended reading** list ranked by value-to-your-paper, each tagged with its role (closest prior work / baseline to compare / foundational to cite / method to borrow / background), with the orchestrator's curated top picks starred,
+- a **"Methods to consider adding"** section: the in-depth analysis of techniques to fold into your method, each with what it is, why it helps, how to integrate, and source papers,
+- a sortable **paper table** (overlap + reading value) and a click-through per-paper detail panel.
 
 ## Configuration
 
@@ -106,6 +114,7 @@ variables (no code change needed):
 | --- | --- | --- |
 | `IDEACHECK_AGENT_MODEL` | orchestrator + query-planner + paper-analyst | `sonnet` |
 | `IDEACHECK_OVERVIEW_MODEL` | overview-generator | `haiku` |
+| `IDEACHECK_IMPROVE_MODEL` | method-advisor (in-depth improvement analysis) | `opus` |
 
 Values accept SDK aliases (`sonnet`, `haiku`, `opus`, `fable`) or a full model id.
 
