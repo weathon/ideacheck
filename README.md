@@ -133,6 +133,32 @@ Values accept SDK aliases (`sonnet`, `haiku`, `opus`, `fable`) or a full model i
 IDEACHECK_AGENT_MODEL=opus ideacheck check "my idea"
 ```
 
+## Backends: Claude or any OpenAI-compatible model
+
+There are two backends with the same four-focus pipeline, prompts, and report:
+
+- `--backend claude` (default) — the Claude Agent SDK (native subagent delegation).
+- `--backend openai` — the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/),
+  which can point at **any OpenAI-compatible endpoint** via a custom `base_url` +
+  `model`. That means you can run the whole multi-agent pipeline on a **self-hosted
+  model** (e.g. a local [vLLM](https://docs.vllm.ai) server) or any provider. The
+  same orchestrator + sub-agents (exposed with `.as_tool()`) and the same alphaXiv
+  function-tools are used; one model serves every agent.
+
+```bash
+pip install "ideacheck[openai] @ git+https://github.com/weathon/ideacheck.git"
+
+# run the whole pipeline on a local vLLM server
+ideacheck check --backend openai \
+  --base-url http://127.0.0.1:8000/v1 \
+  --model Qwen/Qwen3.6-35B-A3B-FP8 \
+  "my research idea"
+```
+
+Or via env (`IDEACHECK_OPENAI_BASE_URL`, `IDEACHECK_OPENAI_MODEL`,
+`IDEACHECK_OPENAI_API_KEY`; key defaults to `EMPTY`, which vLLM ignores). The
+model must support tool/function calling.
+
 ## License
 
 MIT

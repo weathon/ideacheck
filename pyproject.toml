@@ -24,6 +24,11 @@ dependencies = [
     "click>=8.1",
 ]
 
+[project.optional-dependencies]
+# `pip install ideacheck[openai]` to use --backend openai (any OpenAI-compatible
+# endpoint, e.g. a local vLLM server).
+openai = ["openai-agents>=0.17"]
+
 [project.urls]
 Homepage = "https://github.com/weathon/ideacheck"
 Repository = "https://github.com/weathon/ideacheck"
