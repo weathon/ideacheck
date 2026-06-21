@@ -1,0 +1,345 @@
+"""The D3 report view, shared by the static report.html and the live web GUI.
+
+The visualization is a single JS class, `IdeaCheckView`, that renders
+INCREMENTALLY: call `addPaper(p)` as each paper analysis lands and a node
+animates into the force graph; call `setFinal(f)` when the synthesis is ready to
+fill the novelty gauge, verdict, summary and differentiation suggestions.
+
+  - static report.html  feeds the whole saved DATA in at load (build_report_html)
+  - the GUI             feeds the same shapes one SSE event at a time, so the
+                        report builds in real time while the agents work
+
+Both import REPORT_CSS / REPORT_BODY / REPORT_VIEW_JS from here, so there is one
+source of truth for the UI. The per-paper object and the final object have the
+exact shapes the save_paper_analysis / save_final_report tools persist, which is
+also exactly what pipeline.py streams as {type:"paper"} / {type:"final"} events.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+REPORT_CSS = r"""
+:root{
+  --bg:#0b0f17; --panel:#121826; --panel2:#0f1420; --line:#1f2937;
+  --text:#e5e7eb; --muted:#9ca3af; --idea:#3b82f6;
+  --r-direct:#ef4444; --r-related:#f59e0b; --r-tang:#22c55e;
+}
+*{box-sizing:border-box}
+a{color:#60a5fa;text-decoration:none} a:hover{text-decoration:underline}
+h1{font-size:24px;margin:0 0 4px} h2{font-size:16px;color:#cbd5e1;margin:0 0 12px;letter-spacing:.02em}
+.sub{color:var(--muted);font-size:13px;margin-bottom:22px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:20px}
+.grid{display:grid;grid-template-columns:300px 1fr;gap:20px}
+.idea-box{background:var(--panel2);border-left:3px solid var(--idea);border-radius:8px;padding:12px 14px;color:#dbeafe;white-space:pre-wrap}
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center}
+.verdict{display:inline-block;padding:5px 12px;border-radius:999px;font-weight:600;font-size:13px;margin-top:6px}
+.counts{display:flex;gap:14px;margin-top:14px;flex-wrap:wrap;justify-content:center}
+.count{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%}
+.legend{display:flex;gap:18px;margin:2px 0 10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.legend .item{display:flex;align-items:center;gap:7px}
+#graph{width:100%;height:560px;background:radial-gradient(circle at 50% 40%,#0e1525,#0b0f17);border-radius:12px;border:1px solid var(--line)}
+.node-label{font-size:11px;fill:#cbd5e1;pointer-events:none}
+.node-g circle{transition:r .3s ease}
+.muted{color:var(--muted)} .summary :is(h1,h2,h3){color:#e5e7eb} .summary code{background:#0f1420;padding:1px 5px;border-radius:4px}
+.summary{font-size:14.5px} .summary ul{padding-left:20px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;cursor:pointer;user-select:none}
+tr.row{cursor:pointer} tr.row:hover{background:#0f1726}
+.score-pill{display:inline-block;min-width:34px;text-align:center;padding:2px 8px;border-radius:6px;font-weight:700;color:#0b0f17}
+.bar-row{cursor:pointer} .bar-label{font-size:11px;fill:#cbd5e1}
+.suggestions li{margin:6px 0}
+#panel{position:fixed;top:0;right:0;width:430px;max-width:92vw;height:100%;background:var(--panel);border-left:1px solid var(--line);box-shadow:-12px 0 40px rgba(0,0,0,.5);transform:translateX(100%);transition:transform .22s ease;overflow-y:auto;z-index:50;padding:22px}
+#panel.open{transform:translateX(0)}
+#panel .close{position:absolute;top:14px;right:16px;cursor:pointer;color:var(--muted);font-size:22px;line-height:1}
+#panel h3{margin:2px 40px 6px 0;font-size:17px}
+.kv{margin:10px 0} .kv b{color:var(--muted);font-weight:600;font-size:12px;display:block;margin-bottom:3px}
+.taglist{margin:6px 0 0;padding-left:18px} .taglist li{margin:4px 0}
+.relbadge{display:inline-block;padding:3px 9px;border-radius:6px;font-size:12px;font-weight:600;color:#0b0f17}
+.src{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+"""
+
+# DOM skeleton, shared by the static report and the GUI. Same element ids that
+# IdeaCheckView writes into.
+REPORT_BODY = r"""
+  <div class="card grid">
+    <div class="gauge-wrap">
+      <svg id="gauge" width="220" height="150"></svg>
+      <div id="verdict"></div>
+      <div class="counts" id="counts"></div>
+    </div>
+    <div>
+      <h2>The idea</h2>
+      <div class="idea-box" id="idea"></div>
+      <h2 style="margin-top:18px">Synthesis</h2>
+      <div class="summary" id="summary"><span class="muted">waiting for the synthesis…</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Similarity network <span class="muted" id="meta" style="font-weight:400;font-size:13px"></span></h2>
+    <div class="legend">
+      <div class="item"><span class="dot" style="background:var(--idea)"></span>Your idea</div>
+      <div class="item"><span class="dot" style="background:var(--r-direct)"></span>Directly overlapping</div>
+      <div class="item"><span class="dot" style="background:var(--r-related)"></span>Related but different</div>
+      <div class="item"><span class="dot" style="background:var(--r-tang)"></span>Tangential</div>
+      <div class="item muted">(node size &amp; closeness = overlap; drag, click for detail)</div>
+    </div>
+    <svg id="graph"></svg>
+  </div>
+
+  <div class="card">
+    <h2>Overlap by paper</h2>
+    <svg id="bars" width="100%"></svg>
+  </div>
+
+  <div class="card" id="sugg-card" style="display:none">
+    <h2>How to differentiate</h2>
+    <ul class="suggestions" id="suggestions"></ul>
+  </div>
+
+  <div class="card">
+    <h2>All analyzed papers</h2>
+    <table id="table"><thead><tr>
+      <th data-k="overlap_score">Overlap</th><th data-k="title">Title</th>
+      <th data-k="relationship">Relationship</th><th data-k="year">Year</th><th>Source</th>
+    </tr></thead><tbody></tbody></table>
+  </div>
+
+  <div id="panel"><div class="close" onclick="document.getElementById('panel').classList.remove('open')">&times;</div><div id="panel-body"></div></div>
+"""
+
+REPORT_VIEW_JS = r"""
+const REL = {
+  directly_overlapping:{c:"#ef4444",t:"Directly overlapping"},
+  related_but_different:{c:"#f59e0b",t:"Related but different"},
+  tangential:{c:"#22c55e",t:"Tangential"}
+};
+const relColor = r => (REL[r]||{c:"#6b7280"}).c;
+const relText  = r => (REL[r]||{t:r||"unknown"}).t;
+const scoreColor = d3.scaleSequential(d3.interpolateRdYlGn).domain([0,100]);
+function verdictBadge(v){
+  const m={novel:{c:"#22c55e",t:"Novel"},incremental:{c:"#f59e0b",t:"Incremental"},
+    substantially_covered:{c:"#f97316",t:"Substantially covered"},likely_duplicated:{c:"#ef4444",t:"Likely duplicated"}};
+  return m[v]||{c:"#9ca3af",t:v||"unknown"};
+}
+function escapeHtml(s){return (s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+
+class IdeaCheckView {
+  constructor(){
+    this.papers=[]; this.byId={}; this._slug="";
+    this.nodes=[{id:"__idea__",idea:true}]; this.links=[];
+    const svg=d3.select("#graph");
+    this.W=svg.node().clientWidth||1100; this.H=560;
+    svg.attr("viewBox",`0 0 ${this.W} ${this.H}`);
+    this.gG=svg.append("g");
+    svg.call(d3.zoom().scaleExtent([0.3,3]).on("zoom",e=>this.gG.attr("transform",e.transform)));
+    this.linkG=this.gG.append("g").attr("stroke","#475569");
+    this.nodeG=this.gG.append("g");
+    this.linkSel=this.linkG.selectAll("line");
+    this.nodeSel=this.nodeG.selectAll("g");
+    const self=this;
+    this.sim=d3.forceSimulation(this.nodes)
+      .force("link",d3.forceLink(this.links).id(d=>d.id).distance(d=>320-d.score*2.5).strength(d=>0.2+d.score/100*0.7))
+      .force("charge",d3.forceManyBody().strength(-260))
+      .force("center",d3.forceCenter(this.W/2,this.H/2))
+      .force("collide",d3.forceCollide().radius(d=>self.rOf(d)+14))
+      .on("tick",()=>self.tick());
+    d3.selectAll("#table th[data-k]").on("click",function(){
+      const k=this.getAttribute("data-k");
+      if(k===self.sortKey)self.sortDir*=-1; else {self.sortKey=k;self.sortDir=-1;}
+      self.renderTable();
+    });
+    this.sortKey="overlap_score"; this.sortDir=-1;
+  }
+  rOf(d){return d.idea?30:(8+d.overlap_score/100*22);}
+  setIdea(idea,slug){ document.getElementById("idea").textContent=idea||""; this._slug=slug||""; this.renderMeta(); }
+  renderMeta(){ document.getElementById("meta").textContent=this.papers.length+" paper"+(this.papers.length===1?"":"s")+" analyzed"+(this._slug?"  ·  "+this._slug:""); }
+
+  addPaper(p){
+    if(!p)return;
+    if(!p.id)p.id=p.paper_id;           // analyses carry paper_id; use it as the node id
+    if(!p.id||this.byId[p.id])return;
+    this.byId[p.id]=p; this.papers.push(p);
+    this.nodes.push(Object.assign({id:p.id},p));
+    this.links.push({source:"__idea__",target:p.id,score:p.overlap_score});
+    this.updateGraph(); this.renderBars(); this.renderTable(); this.renderCounts(); this.renderMeta();
+  }
+
+  updateGraph(){
+    const self=this;
+    this.linkSel=this.linkG.selectAll("line").data(this.links,d=>(d.target.id||d.target))
+      .join("line").attr("stroke-width",d=>1+d.score/100*5).attr("stroke-opacity",d=>0.18+d.score/100*0.5);
+    this.nodeSel=this.nodeG.selectAll("g.node-g").data(this.nodes,d=>d.id).join(
+      enter=>{
+        const g=enter.append("g").attr("class","node-g").style("cursor","pointer")
+          .call(d3.drag()
+            .on("start",(e,d)=>{if(!e.active)self.sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;})
+            .on("drag",(e,d)=>{d.fx=e.x;d.fy=e.y;})
+            .on("end",(e,d)=>{if(!e.active)self.sim.alphaTarget(0);d.fx=null;d.fy=null;}))
+          .on("click",(e,d)=>{if(!d.idea)self.openPaper(d.id);});
+        g.append("circle").attr("r",d=>self.rOf(d))
+          .attr("fill",d=>d.idea?"#3b82f6":relColor(d.relationship))
+          .attr("stroke",d=>d.idea?"#93c5fd":"#0b0f17").attr("stroke-width",d=>d.idea?3:1.5);
+        g.append("text").attr("class","node-label").attr("text-anchor","middle").attr("dy",d=>self.rOf(d)+13)
+          .text(d=>d.idea?"YOUR IDEA":(d.title||"").slice(0,42)+((d.title||"").length>42?"…":""));
+        return g;
+      }
+    );
+    this.sim.nodes(this.nodes);
+    this.sim.force("link").links(this.links);
+    this.sim.alpha(0.9).restart();
+  }
+  tick(){
+    this.linkSel.attr("x1",d=>d.source.x).attr("y1",d=>d.source.y).attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
+    this.nodeSel.attr("transform",d=>`translate(${d.x},${d.y})`);
+  }
+
+  renderBars(){
+    const ps=this.papers.slice().sort((a,b)=>b.overlap_score-a.overlap_score);
+    const svg=d3.select("#bars"); svg.selectAll("*").remove();
+    if(!ps.length)return;
+    const W=svg.node().clientWidth||1100, rowH=26, M={l:230,r:46,t:18,b:8};
+    const H=M.t+M.b+ps.length*rowH; svg.attr("viewBox",`0 0 ${W} ${H}`).attr("height",H);
+    const x=d3.scaleLinear().domain([0,100]).range([M.l,W-M.r]);
+    const y=d3.scaleBand().domain(ps.map(p=>p.id)).range([M.t,H-M.b]).padding(0.22);
+    const g=svg.append("g"), self=this;
+    g.append("g").attr("transform",`translate(0,${M.t})`).call(d3.axisTop(x).ticks(5).tickSize(-(H)))
+      .call(s=>s.selectAll("line").attr("stroke","#1f2937")).call(s=>s.select(".domain").remove())
+      .call(s=>s.selectAll("text").attr("fill","#9ca3af"));
+    const rows=g.selectAll(".bar-row").data(ps).join("g").attr("class","bar-row").on("click",(e,p)=>self.openPaper(p.id));
+    rows.append("rect").attr("x",x(0)).attr("y",p=>y(p.id)).attr("height",y.bandwidth())
+      .attr("width",p=>x(p.overlap_score)-x(0)).attr("rx",4).attr("fill",p=>relColor(p.relationship));
+    rows.append("text").attr("class","bar-label").attr("x",M.l-10).attr("y",p=>y(p.id)+y.bandwidth()/2+4).attr("text-anchor","end")
+      .text(p=>(p.title||"").slice(0,40)+((p.title||"").length>40?"…":""));
+    rows.append("text").attr("x",p=>x(p.overlap_score)+6).attr("y",p=>y(p.id)+y.bandwidth()/2+4)
+      .attr("fill","#e5e7eb").attr("font-size",12).attr("font-weight",700).text(p=>p.overlap_score);
+  }
+
+  renderTable(){
+    const tb=d3.select("#table tbody"); tb.selectAll("*").remove();
+    const self=this;
+    const rows=this.papers.slice().sort((a,b)=>{
+      const av=a[self.sortKey],bv=b[self.sortKey];
+      return (av<bv?-1:av>bv?1:0)*self.sortDir;
+    });
+    rows.forEach(p=>{
+      const tr=tb.append("tr").attr("class","row").on("click",()=>self.openPaper(p.id));
+      tr.append("td").html(`<span class="score-pill" style="background:${scoreColor(p.overlap_score)}">${p.overlap_score}</span>`);
+      tr.append("td").text(p.title||"");
+      tr.append("td").html(`<span class="relbadge" style="background:${relColor(p.relationship)}">${relText(p.relationship)}</span>`);
+      tr.append("td").text(p.year||"");
+      tr.append("td").html(`<span class="src">${p.evidence_source||""}</span>`);
+    });
+  }
+
+  renderCounts(){
+    const el=document.getElementById("counts"); el.innerHTML="";
+    const self=this;
+    ["directly_overlapping","related_but_different","tangential"].forEach(r=>{
+      const n=self.papers.filter(p=>p.relationship===r).length; if(!n)return;
+      const d=document.createElement("div"); d.className="count";
+      d.innerHTML=`<span class="dot" style="background:${relColor(r)}"></span>${n} ${relText(r)}`;
+      el.appendChild(d);
+    });
+  }
+
+  setFinal(f){
+    if(!f)return;
+    const sc=f.novelty_score;
+    const svg=d3.select("#gauge"); svg.selectAll("*").remove();
+    const cx=110,cy=130,R=92;
+    const arc=d3.arc().innerRadius(R-18).outerRadius(R).startAngle(-Math.PI/2);
+    svg.append("path").attr("transform",`translate(${cx},${cy})`).attr("d",arc.endAngle(Math.PI/2)()).attr("fill","#1f2937");
+    svg.append("path").attr("transform",`translate(${cx},${cy})`).attr("d",arc.endAngle(-Math.PI/2+Math.PI*sc/100)()).attr("fill",scoreColor(sc));
+    svg.append("text").attr("x",cx).attr("y",cy-18).attr("text-anchor","middle").attr("font-size",40).attr("font-weight",800).attr("fill","#fff").text(sc);
+    svg.append("text").attr("x",cx).attr("y",cy+4).attr("text-anchor","middle").attr("font-size",12).attr("fill","#9ca3af").text("novelty / 100");
+    const vb=verdictBadge(f.verdict);
+    document.getElementById("verdict").innerHTML=`<span class="verdict" style="background:${vb.c}22;color:${vb.c};border:1px solid ${vb.c}">${vb.t}</span>`;
+    document.getElementById("summary").innerHTML=marked.parse(f.summary||"");
+    const sug=document.getElementById("suggestions"); sug.innerHTML="";
+    (f.differentiation_suggestions||[]).forEach(s=>{const li=document.createElement("li");li.textContent=s;sug.appendChild(li);});
+    document.getElementById("sugg-card").style.display=(f.differentiation_suggestions||[]).length?"":"none";
+  }
+
+  openPaper(id){
+    const p=this.byId[id]; if(!p)return;
+    const lis=a=>(a&&a.length)?("<ul class='taglist'>"+a.map(s=>`<li>${escapeHtml(s)}</li>`).join("")+"</ul>"):"<div class='muted'>none</div>";
+    document.getElementById("panel-body").innerHTML=`
+      <h3>${escapeHtml(p.title||"")}</h3>
+      <div class="kv"><span class="relbadge" style="background:${relColor(p.relationship)}">${relText(p.relationship)}</span>
+        &nbsp;<span class="score-pill" style="background:${scoreColor(p.overlap_score)}">${p.overlap_score}</span> overlap
+        &nbsp;<span class="src">judged from ${p.evidence_source||"?"}</span></div>
+      <div class="kv"><b>Authors</b>${escapeHtml((p.authors||[]).join(", "))||"<span class='muted'>n/a</span>"}</div>
+      <div class="kv"><b>Year</b>${escapeHtml(p.year||"n/a")} &nbsp; <a href="${p.url}" target="_blank" rel="noopener">open on alphaXiv ↗</a></div>
+      <div class="kv"><b>In one line</b>${escapeHtml(p.one_line||"")}</div>
+      <div class="kv"><b>Key similarities</b>${lis(p.key_similarities)}</div>
+      <div class="kv"><b>Key differences</b>${lis(p.key_differences)}</div>`;
+    document.getElementById("panel").classList.add("open");
+  }
+}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")document.getElementById("panel").classList.remove("open");});
+"""
+
+REPORT_TEMPLATE = (
+    """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Idea Novelty Check</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1280px;margin:0 auto;padding:28px 22px 80px}
+"""
+    + REPORT_CSS
+    + """</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Idea Novelty Check</h1>
+  <div class="sub">multi-agent prior-art check over alphaXiv</div>
+"""
+    + REPORT_BODY
+    + """</div>
+<script>
+"""
+    + REPORT_VIEW_JS
+    + """
+const DATA = __IDEACHECK_DATA__;
+const V = new IdeaCheckView();
+V.setIdea(DATA.idea, DATA.slug);
+(DATA.papers||[]).forEach(p=>V.addPaper(p));
+V.setFinal(DATA);
+</script>
+</body>
+</html>
+"""
+)
+
+
+def build_report_html(run_dir: Path) -> Path:
+    run_dir = Path(run_dir)
+    report = json.loads((run_dir / "report.json").read_text())
+    meta = json.loads((run_dir / "meta.json").read_text())
+    papers = [json.loads(f.read_text()) for f in sorted((run_dir / "papers").glob("*.json"))]
+
+    data = {
+        "idea": report["idea"],
+        "slug": meta["slug"],
+        "novelty_score": report["novelty_score"],
+        "verdict": report["verdict"],
+        "summary": report["summary"],
+        "differentiation_suggestions": report["differentiation_suggestions"],
+        "papers": papers,
+    }
+    blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    html = REPORT_TEMPLATE.replace("__IDEACHECK_DATA__", blob)
+    out = run_dir / "report.html"
+    out.write_text(html, encoding="utf-8")
+    return out

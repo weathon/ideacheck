@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+ideacheck_runs/
+.ideacheck/
+diag.py
+demo_progressive.py

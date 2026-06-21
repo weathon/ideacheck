@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ideacheck"
+version = "0.1.0"
+description = "Multi-agent prior-art / idea-novelty checker over alphaXiv, built on the Claude Agent SDK. CLI + web GUI + interactive D3 report."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "weathon" }]
+keywords = ["arxiv", "alphaxiv", "research", "prior-art", "claude", "agent", "llm"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Science/Research",
+]
+dependencies = [
+    "claude-agent-sdk>=0.1.0",
+    "alphaxiv-py>=0.6.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "click>=8.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/weathon/ideacheck"
+Repository = "https://github.com/weathon/ideacheck"
+
+[project.scripts]
+ideacheck = "ideacheck.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ideacheck"]
