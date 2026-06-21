@@ -26,19 +26,21 @@ def cli():
 @click.argument("idea", required=False)
 @click.option("--idea-file", type=click.Path(exists=True, dir_okay=False), help="Read the idea text from a file.")
 @click.option("--out-dir", default="ideacheck_runs", show_default=True, help="Where run directories are written.")
+@click.option("--before", "before", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="Only consider papers published before this date (YYYY-MM-DD). Lets you test the tool on an already-published paper as of just before it appeared.")
 @click.option("--open/--no-open", "open_report", default=True, show_default=True, help="Open the HTML report when done.")
-def check(idea, idea_file, out_dir, open_report):
+def check(idea, idea_file, out_dir, before, open_report):
     """Run the novelty check on IDEA (or --idea-file)."""
     if idea_file:
         idea = Path(idea_file).read_text().strip()
     if not idea:
         raise click.UsageError("Provide an idea as an argument or via --idea-file.")
 
+    cutoff = before.date() if before else None
     run_dir = make_run_dir(idea, Path(out_dir))
-    click.echo(click.style(f"run: {run_dir}", fg="cyan"))
+    click.echo(click.style(f"run: {run_dir}", fg="cyan") + (f"  (papers before {cutoff})" if cutoff else ""))
 
     async def drive():
-        async for ev in run_idea_check(idea, run_dir):
+        async for ev in run_idea_check(idea, run_dir, cutoff):
             t = ev["type"]
             if t == "delegate":
                 click.echo(click.style(f"  → {ev['agent']}", fg="yellow") + f"  {ev['task']}")

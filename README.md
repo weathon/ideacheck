@@ -80,6 +80,12 @@ CLI:
 ```bash
 ideacheck check "a diffusion model that edits 3D scenes from natural-language instructions"
 ideacheck check --idea-file my_idea.txt --no-open
+
+# time cutoff: only consider papers published before a date — feed an
+# already-published paper's idea and cut off just before it appeared to test
+# whether the tool would have flagged the prior art (the paper itself and
+# anything newer are excluded):
+ideacheck check --before 2023-05-01 "the core idea of the paper under test"
 ```
 
 Each run writes `./ideacheck_runs/<timestamp>-<slug>/` containing `report.json`,

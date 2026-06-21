@@ -17,12 +17,17 @@ import json
 from pathlib import Path
 
 from alphaxiv.exceptions import AlphaXivError
+from alphaxiv.types import parse_datetime
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 OVERVIEW_CACHE_DIR = Path.home() / ".ideacheck" / "overview_cache"
 
 
-def build_servers(axv, run_dir: Path):
+def build_servers(axv, run_dir: Path, cutoff=None):
+    # cutoff is a datetime.date or None. When set, search/similar only return
+    # papers published strictly before it (undated papers are dropped, since we
+    # cannot prove they predate the cutoff) - used to test on already-published
+    # papers without leaking the target or anything published after it.
     run_dir = Path(run_dir)
     papers_dir = run_dir / "papers"
     papers_dir.mkdir(parents=True, exist_ok=True)
@@ -41,8 +46,13 @@ def build_servers(axv, run_dir: Path):
             results = await axv.search.papers_rich(args["query"])
         except AlphaXivError as exc:
             return {"content": [{"type": "text", "text": f"alphaXiv search failed: {exc}"}], "is_error": True}
-        out = [
-            {
+        out = []
+        for r in results:
+            if cutoff is not None:
+                pd = parse_datetime(r.publication_date)
+                if pd is None or pd.date() >= cutoff:
+                    continue
+            out.append({
                 "id": r.canonical_id or r.universal_paper_id,
                 "canonical_id": r.canonical_id,
                 "universal_paper_id": r.universal_paper_id,
@@ -53,9 +63,7 @@ def build_servers(axv, run_dir: Path):
                 "topics": r.topics,
                 "github_url": r.github_url,
                 "github_stars": r.github_stars,
-            }
-            for r in results
-        ]
+            })
         return {"content": [{"type": "text", "text": json.dumps(out, ensure_ascii=False, indent=2)}]}
 
     @tool(
@@ -160,8 +168,11 @@ def build_servers(axv, run_dir: Path):
             cards = await axv.papers.similar(args["paper_id"])
         except AlphaXivError as exc:
             return {"content": [{"type": "text", "text": f"Similar-papers lookup failed for {args['paper_id']}: {exc}"}], "is_error": True}
-        out = [
-            {
+        out = []
+        for c in cards:
+            if cutoff is not None and (c.publication_date is None or c.publication_date.date() >= cutoff):
+                continue
+            out.append({
                 "id": c.canonical_id or c.paper_id,
                 "canonical_id": c.canonical_id,
                 "title": c.title,
@@ -169,9 +180,7 @@ def build_servers(axv, run_dir: Path):
                 "authors": c.authors,
                 "publication_date": c.publication_date.isoformat() if c.publication_date else None,
                 "topics": c.topics,
-            }
-            for c in cards
-        ]
+            })
         return {"content": [{"type": "text", "text": json.dumps(out, ensure_ascii=False, indent=2)}]}
 
     @tool(

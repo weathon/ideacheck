@@ -16,6 +16,7 @@ create_app(base_dir):
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -59,6 +60,7 @@ a.dl{color:var(--accent);font-size:13px;margin-left:6px;display:none}
   <textarea id="idea-input" placeholder="Describe your research idea in a few sentences..."></textarea>
   <div class="row">
     <button id="run">Check novelty</button>
+    <label class="statusline">only papers before <input type="date" id="cutoff" style="background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:7px;padding:5px 8px;font:inherit"></label>
     <span class="statusline" id="status"></span>
     <a class="dl" id="dl" target="_blank">open saved report ↗</a>
   </div>
@@ -89,14 +91,15 @@ function logline(ev){
 }
 $("run").onclick=()=>{
   const idea=$("idea-input").value.trim(); if(!idea)return;
+  const cutoff=$("cutoff").value;
   if(es)es.close();
   $("log").innerHTML=""; $("dl").style.display="none";
   $("run").disabled=true; $("status").textContent="agents working…";
   V=new IdeaCheckView(); V.setIdea(idea,"");
-  es=new EventSource("/api/stream?idea="+encodeURIComponent(idea));
+  es=new EventSource("/api/stream?idea="+encodeURIComponent(idea)+(cutoff?"&before="+cutoff:""));
   es.onmessage=e=>{
     const ev=JSON.parse(e.data); logline(ev);
-    if(ev.type==="start"){ V.setIdea(ev.idea,""); }
+    if(ev.type==="start"){ V.setIdea(ev.idea,""); V.setCutoff(ev.cutoff); }
     else if(ev.type==="scope"){ V.setScope(ev); $("status").textContent="scoped the proposal…"; }
     else if(ev.type==="paper"){ V.addPaper(ev); $("status").textContent=V.papers.length+" papers analyzed…"; }
     else if(ev.type==="final"){ V.setFinal(ev); $("status").textContent="synthesizing report…"; }
@@ -123,10 +126,11 @@ def create_app(base_dir: Path) -> FastAPI:
         return GUI_HTML
 
     @app.get("/api/stream")
-    async def stream(idea: str):
+    async def stream(idea: str, before: str | None = None):
+        cutoff = date.fromisoformat(before) if before else None
         async def gen():
             run_dir = make_run_dir(idea, base_dir)
-            async for ev in run_idea_check(idea, run_dir):
+            async for ev in run_idea_check(idea, run_dir, cutoff):
                 yield "data: " + json.dumps(ev, ensure_ascii=False) + "\n\n"
                 if ev["type"] == "result":
                     build_report_html(run_dir)

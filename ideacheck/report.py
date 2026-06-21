@@ -193,7 +193,7 @@ function escapeHtml(s){return (s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&"
 
 class IdeaCheckView {
   constructor(){
-    this.papers=[]; this.byId={}; this._slug=""; this._recommended={};
+    this.papers=[]; this.byId={}; this._slug=""; this._recommended={}; this._cutoff=null;
     this.nodes=[{id:"__idea__",idea:true}]; this.links=[];
     const svg=d3.select("#graph");
     this.W=svg.node().clientWidth||1100; this.H=560;
@@ -220,7 +220,8 @@ class IdeaCheckView {
   }
   rOf(d){return d.idea?30:(8+d.overlap_score/100*22);}
   setIdea(idea,slug){ document.getElementById("idea").textContent=idea||""; this._slug=slug||""; this.renderMeta(); }
-  renderMeta(){ document.getElementById("meta").textContent=this.papers.length+" paper"+(this.papers.length===1?"":"s")+" analyzed"+(this._slug?"  ·  "+this._slug:""); }
+  setCutoff(c){ this._cutoff=c; this.renderMeta(); }
+  renderMeta(){ document.getElementById("meta").textContent=this.papers.length+" paper"+(this.papers.length===1?"":"s")+" analyzed"+(this._cutoff?"  ·  literature as of "+this._cutoff:"")+(this._slug?"  ·  "+this._slug:""); }
 
   addPaper(p){
     if(!p)return;
@@ -438,6 +439,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 -apple-syste
 const DATA = __IDEACHECK_DATA__;
 const V = new IdeaCheckView();
 V.setIdea(DATA.idea, DATA.slug);
+V.setCutoff(DATA.cutoff);
 V.setScope(DATA.scope);
 (DATA.papers||[]).forEach(p=>V.addPaper(p));
 V.setFinal(DATA);
@@ -462,6 +464,7 @@ def build_report_html(run_dir: Path) -> Path:
     data = {
         "idea": report["idea"],
         "slug": meta["slug"],
+        "cutoff": meta["cutoff"],
         "scope": scope,
         "novelty_score": report["novelty_score"],
         "verdict": report["verdict"],

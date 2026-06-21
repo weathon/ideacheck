@@ -39,16 +39,26 @@ def make_run_dir(idea: str, base_dir: Path) -> Path:
     return run_dir
 
 
-async def run_idea_check(idea: str, run_dir: Path):
+async def run_idea_check(idea: str, run_dir: Path, cutoff=None):
     run_dir = Path(run_dir)
     (run_dir / "papers").mkdir(parents=True, exist_ok=True)
-    (run_dir / "meta.json").write_text(json.dumps({"idea": idea, "slug": run_dir.name}, ensure_ascii=False, indent=2))
+    (run_dir / "meta.json").write_text(json.dumps(
+        {"idea": idea, "slug": run_dir.name, "cutoff": cutoff.isoformat() if cutoff else None},
+        ensure_ascii=False, indent=2))
+
+    system_prompt = ORCHESTRATOR_PROMPT
+    if cutoff is not None:
+        system_prompt += (
+            f"\n\nTIME CUTOFF: a cutoff of {cutoff.isoformat()} is active. The search tools only "
+            f"return papers published before that date. Treat this as the exact state of the "
+            f"literature as of {cutoff.isoformat()} - do not assume anything newer exists."
+        )
 
     async with AlphaXivClient() as axv:
-        axv_server, store_server = build_servers(axv, run_dir)
+        axv_server, store_server = build_servers(axv, run_dir, cutoff)
         options = ClaudeAgentOptions(
             model=AGENT_MODEL,
-            system_prompt=ORCHESTRATOR_PROMPT,
+            system_prompt=system_prompt,
             permission_mode="bypassPermissions",
             mcp_servers={"axv": axv_server, "store": store_server},
             allowed_tools=ALLOWED_TOOLS,
@@ -61,7 +71,7 @@ async def run_idea_check(idea: str, run_dir: Path):
             "the final report with save_final_report.\n\nIdea:\n\n" + idea
         )
 
-        yield {"type": "start", "idea": idea, "run_dir": str(run_dir)}
+        yield {"type": "start", "idea": idea, "run_dir": str(run_dir), "cutoff": cutoff.isoformat() if cutoff else None}
 
         async for message in query(prompt=prompt, options=options):
             inside = bool(getattr(message, "parent_tool_use_id", None))
