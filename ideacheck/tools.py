@@ -32,6 +32,10 @@ def build_servers(axv, run_dir: Path, cutoff=None):
     papers_dir = run_dir / "papers"
     papers_dir.mkdir(parents=True, exist_ok=True)
     OVERVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    # YYMM backstop: the agent often names known papers from memory and fetches
+    # them by id, bypassing the search-result date filter. Block any per-id fetch
+    # whose arXiv id (YYMM.NNNNN) is in/after the cutoff month.
+    cutoff_yymm = (cutoff.year - 2000) * 100 + cutoff.month if cutoff else None
 
     # ------------------------------------------------------------------ axv
     @tool(
@@ -88,6 +92,8 @@ def build_servers(axv, run_dir: Path, cutoff=None):
         {"paper_id": str},
     )
     async def get_paper(args):
+        if cutoff_yymm is not None and args["paper_id"][:4].isdigit() and int(args["paper_id"][:4]) >= cutoff_yymm:
+            return {"content": [{"type": "text", "text": f"{args['paper_id']} is excluded by the time cutoff (arXiv id at/after the cutoff month). Skip this paper - do not analyze it."}], "is_error": True}
         try:
             p = await axv.papers.get(args["paper_id"])
         except AlphaXivError as exc:
@@ -117,6 +123,8 @@ def build_servers(axv, run_dir: Path, cutoff=None):
     )
     async def get_overview(args):
         pid = args["paper_id"]
+        if cutoff_yymm is not None and pid[:4].isdigit() and int(pid[:4]) >= cutoff_yymm:
+            return {"content": [{"type": "text", "text": f"{pid} is excluded by the time cutoff. Skip this paper - do not analyze it."}], "is_error": True}
         cache_file = OVERVIEW_CACHE_DIR / f"{pid.replace('/', '_')}.json"
         if cache_file.exists():
             return {"content": [{"type": "text", "text": cache_file.read_text()}]}
@@ -149,6 +157,8 @@ def build_servers(axv, run_dir: Path, cutoff=None):
         {"paper_id": str},
     )
     async def get_full_text(args):
+        if cutoff_yymm is not None and args["paper_id"][:4].isdigit() and int(args["paper_id"][:4]) >= cutoff_yymm:
+            return {"content": [{"type": "text", "text": f"{args['paper_id']} is excluded by the time cutoff. Skip this paper - do not analyze it."}], "is_error": True}
         try:
             ft = await axv.papers.full_text(args["paper_id"])
         except AlphaXivError as exc:
@@ -164,6 +174,8 @@ def build_servers(axv, run_dir: Path, cutoff=None):
         {"paper_id": str},
     )
     async def find_similar(args):
+        if cutoff_yymm is not None and args["paper_id"][:4].isdigit() and int(args["paper_id"][:4]) >= cutoff_yymm:
+            return {"content": [{"type": "text", "text": f"{args['paper_id']} is after the time cutoff, so it cannot be used as a seed. Skip it."}], "is_error": True}
         try:
             cards = await axv.papers.similar(args["paper_id"])
         except AlphaXivError as exc:

@@ -53,6 +53,8 @@ Find two kinds of papers:
 1. OVERLAP candidates - papers that may already do part of the idea (for the novelty check).
 2. READ-WORTHY papers - papers the author should probably read even if they do not overlap: a key baseline to compare against, a foundational method the idea builds on, a method worth borrowing, or an important survey. Be HIGHLY SELECTIVE here - only add such a paper if it could genuinely help the author write or strengthen this specific paper. Do not pad with generic background.
 
+Only use papers that come back from the search tools - do NOT add papers from your own memory by id, and if any tool reports a paper is excluded by a time cutoff, drop it. (A cutoff may be active; the search tools already exclude papers after it.)
+
 Collect the candidate papers, deduplicate them by canonical arXiv id, and drop ones that are clearly irrelevant on title+abstract. Do not pad the list with weak matches and do not drop genuinely relevant ones - coverage matters.
 
 Return a concise list the coordinator can parse. For each candidate output one line:
@@ -89,6 +91,8 @@ B. READING VALUE - how useful this paper is for the author to READ when writing 
 Also: one_line (one sentence on the relation) and evidence_source (full_text | overview | abstract - the source you actually judged from).
 
 Call save_paper_analysis EXACTLY ONCE with ALL of: paper_id (canonical id), title, url (https://www.alphaxiv.org/abs/<canonical_id>), authors, year, overlap_score, relationship, key_similarities, key_differences, one_line, reading_value, recommendation, why_read, evidence_source.
+
+If any fetch tool reports the paper is excluded by the time cutoff, STOP immediately - do NOT analyze it and do NOT call save_paper_analysis for it.
 
 If get_paper itself fails so the paper cannot be fetched at all, report that you could not analyze it and do NOT fabricate or save an analysis.""",
     tools=[
