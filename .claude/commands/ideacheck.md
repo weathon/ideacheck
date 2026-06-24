@@ -22,6 +22,15 @@ All lookups go through `python axv.py <subcommand>`. Each prints JSON to stdout.
 | `python axv.py similar <arxiv_id> [--before ...]` | Find papers alphaXiv considers similar. Returns JSON list. |
 | `python axv.py save-overview <json_file>` | Cache a generated overview (for papers without one). JSON must have: paper_id, title, summary, original_problem, solution, key_insights, results. |
 
+## Orchestration — pick the right mechanism for your harness
+
+This skill is designed to work with any AI coding harness that supports tool use and shell access. The orchestration mechanism differs:
+
+- **Claude Code**: Use the **Workflow** tool to run the pipeline. Workflows give deterministic fan-out with `parallel()` and `pipeline()`, structured return values via `schema`, and a progress UI. Prefer this when available.
+- **Other harnesses** (Cursor, Windsurf, Aider, custom Agent SDK loops, etc.): Use **subagents** (or your harness's equivalent of spawning child agents) for the query-planner, parallel paper-analysts, and method-advisor. If your harness has no subagent mechanism, run the steps sequentially in the main context.
+
+The workflow and subagent paths produce identical outputs — the same JSON files and the same rendered report.
+
 ## Workflow
 
 ### Step 0: Setup
@@ -50,7 +59,7 @@ Write `$RUN_DIR/scope.json` with these four fields. Everything downstream evalua
 
 ### Step 2: Search for Papers
 
-Spawn a **query-planner subagent** with this prompt (fill in the proposal and background):
+Spawn a **query-planner** (subagent or workflow agent) with this prompt (fill in the proposal and background):
 
 ```
 You are a literature-search strategist. Search alphaXiv for papers related to a research proposal.
@@ -75,7 +84,7 @@ Return the candidate list as one line per paper:
 
 ### Step 3: Parallel Paper Analysis
 
-For EVERY candidate paper from the planner, spawn a **paper-analyst subagent** IN PARALLEL (put all Agent calls in a single turn). Give each this prompt (fill in the fields):
+For EVERY candidate paper from the planner, spawn a **paper-analyst** IN PARALLEL. In Claude Code, use `parallel()` in a Workflow or put all Agent calls in a single turn. In other harnesses, spawn concurrent subagents or run sequentially if concurrency is unavailable. Give each this prompt (fill in the fields):
 
 ```
 Analyze ONE paper against the user's PROPOSED contribution.
@@ -125,7 +134,7 @@ There is no cap on papers analyzed - the breadth of the literature decides the c
 
 ### Step 4: Method Advice
 
-After all paper analyses are done, spawn a **method-advisor subagent** (use model=opus for this one):
+After all paper analyses are done, spawn a **method-advisor** (use model=opus if your harness supports model selection per agent):
 
 ```
 You are a senior research methods advisor. Recommend concrete methods/techniques from the analyzed literature that the author could fold into their method to improve it.
