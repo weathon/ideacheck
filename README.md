@@ -75,7 +75,40 @@ queried publicly, **no alphaXiv API key required**.
 
 ## Usage
 
-CLI:
+### Option A: Claude Code Skill (recommended)
+
+If you use [Claude Code](https://claude.com/claude-code), ideacheck is available
+as a built-in `/ideacheck` slash command. No `pip install` needed — just the
+`axv.py` and `render.py` scripts in this directory plus the skill file at
+`.claude/commands/ideacheck.md` in the parent repo.
+
+```
+/ideacheck a diffusion model that edits 3D scenes from natural-language instructions
+/ideacheck --before 2023-05-01 the core idea of the paper under test
+```
+
+The skill orchestrates everything via subagents:
+1. **Scope split** — separates background from proposal (no lookups)
+2. **Query-planner subagent** — diverse searches + cross-domain analog discovery
+3. **Paper-analyst subagents** — one per paper, spawned IN PARALLEL, each calls `axv.py` CLI tools
+4. **Method-advisor subagent** (Opus) — in-depth method improvement analysis
+5. **Synthesis** — final novelty verdict + report JSON
+6. **Render** — calls `python ideacheck/render.py` to produce `report.md` + `report.html`
+
+The CLI tools used by the subagents:
+
+```bash
+python ideacheck/axv.py search "query" [--before YYYY-MM-DD]   # search papers
+python ideacheck/axv.py topics "query"                          # discover vocabulary
+python ideacheck/axv.py paper <arxiv_id>                        # paper metadata
+python ideacheck/axv.py overview <arxiv_id>                     # structured overview (cached)
+python ideacheck/axv.py fulltext <arxiv_id>                     # full extracted text
+python ideacheck/axv.py similar <arxiv_id>                      # similar papers
+python ideacheck/axv.py save-overview <json_file>               # cache a generated overview
+python ideacheck/render.py <run_dir>                            # JSON → report.md + report.html
+```
+
+### Option B: Standalone CLI (Python package)
 
 ```bash
 ideacheck check "a diffusion model that edits 3D scenes from natural-language instructions"
