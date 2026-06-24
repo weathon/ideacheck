@@ -11,18 +11,10 @@ it mines the [alphaXiv](https://www.alphaxiv.org) literature and produces:
 
 Output: interactive D3 HTML report + markdown report + per-paper JSON.
 
-> **Cost warning:** This tool is **token-hungry**. A single run analyzes 10–30+
-> papers, each requiring full-text retrieval + LLM analysis. Expect:
->
-> | | Tokens (approximate) | Cost (approximate) |
-> |---|---|---|
-> | Niche idea (~10 papers) | TBD | TBD |
-> | Broad idea (~25 papers) | TBD | TBD |
-> | Very broad (~40+ papers) | TBD | TBD |
->
-> To reduce cost, use a harness that supports **cheap or local models** — see
-> [Saving cost](#saving-cost) below. Generated overviews are cached under
-> `~/.ideacheck/overview_cache/` and reused across runs.
+⚠️ **This tool is token-hungry.** A single run analyzes 10–30+ papers, each
+requiring full-text retrieval + LLM analysis. One test run showed [TBD]
+(calculated by [ccusage](https://ccusage.com/)). To reduce cost, use a harness
+that supports **cheap or local models** — see [Saving cost](#saving-cost) below.
 
 ## How it works (multi-agent)
 
@@ -198,16 +190,6 @@ Models are set via environment variables:
 ```bash
 IDEACHECK_AGENT_MODEL=opus ideacheck check "my idea"
 ```
-
-## Token usage
-
-Measured on real runs (will be updated with more data):
-
-| Idea scope | Papers analyzed | Input tokens | Output tokens | Total tokens | Wall time | Cost (API) |
-|---|---|---|---|---|---|---|
-| TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 
 ## License
 
