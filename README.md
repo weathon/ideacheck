@@ -42,22 +42,45 @@ written to disk as it completes, so a crash mid-run keeps all finished papers.
 
 alphaXiv is queried through public endpoints — **no API key needed**.
 
-## Setup
+## Install
 
-### Option A: Slash command in any AI coding harness (recommended)
+### 1. Install the Python dependency
 
-The `/ideacheck` command works in any harness that supports custom commands /
-skills and shell access. The skill file lives at `.claude/commands/ideacheck.md`
-and is designed to be **harness-agnostic**: it documents the full workflow,
-CLI tools, JSON schemas, and agent prompts so any harness can execute it.
+```bash
+pip install alphaxiv-py
+```
+
+### 2. Install the skill into your project
+
+Clone this repo (or add as a submodule), then copy the skill file and CLI
+tools into your project:
 
 ```bash
 git clone https://github.com/weathon/ideacheck.git
-cd ideacheck
-pip install alphaxiv-py    # the only runtime dependency
+
+# copy the skill into your project's .claude/commands/
+mkdir -p /path/to/your/project/.claude/commands
+cp ideacheck/.claude/commands/ideacheck.md /path/to/your/project/.claude/commands/
+
+# copy the CLI tools somewhere on your project path
+cp ideacheck/axv.py ideacheck/render.py /path/to/your/project/
 ```
 
-Then in your harness:
+Or with a symlink (stays in sync with upstream):
+
+```bash
+ln -s /absolute/path/to/ideacheck/.claude/commands/ideacheck.md \
+      /path/to/your/project/.claude/commands/ideacheck.md
+ln -s /absolute/path/to/ideacheck/axv.py /path/to/your/project/axv.py
+ln -s /absolute/path/to/ideacheck/render.py /path/to/your/project/render.py
+```
+
+The skill expects `axv.py` and `render.py` in the working directory. If you
+place them elsewhere, edit the paths in your copy of `ideacheck.md`.
+
+### 3. Use it
+
+Open your project in any AI coding harness and run:
 
 ```
 /ideacheck a diffusion model that edits 3D scenes from natural-language instructions
@@ -72,7 +95,7 @@ Then in your harness:
 | **Cursor / Windsurf / other** | Uses **subagents** (or the harness's equivalent). If no subagent mechanism exists, steps run sequentially in the main context. |
 | **Any harness** | The skill is self-contained: it documents every CLI command, every JSON schema, and every agent prompt. Even a harness with no subagent support can follow the instructions step by step. |
 
-**Requirements:** Python ≥ 3.12, `alphaxiv-py` (`pip install alphaxiv-py`).
+**Requirements:** Python ≥ 3.12, `alphaxiv-py`.
 No API key needed for alphaXiv (public endpoints). Your harness handles LLM
 authentication.
 
