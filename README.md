@@ -12,7 +12,8 @@ it mines the [alphaXiv](https://www.alphaxiv.org) literature and produces:
 Output: interactive D3 HTML report + markdown report + per-paper JSON.
 
 ⚠️ **This tool is token-hungry.** A single run analyzes 10–30+ papers, each
-requiring full-text retrieval + LLM analysis. One test run showed [TBD]
+requiring full-text retrieval + LLM analysis. One test run showed 8% of 5h 
+usage and 2% of weekly usage on a Claude Max 20x plan, which is $ if used via API
 (calculated by [ccusage](https://ccusage.com/)). To reduce cost, use a harness
 that supports **cheap or local models** — see [Saving cost](#saving-cost) below.
 
