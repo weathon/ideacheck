@@ -39,48 +39,19 @@ alphaXiv is queried through public endpoints — **no alphaXiv API key needed**.
 
 ## Setup
 
-**1. Requirements**
-
-- Python ≥ 3.12 (required by `alphaxiv-py`).
-- A Claude credential (see step 3). The Claude Agent SDK ships its own bundled
-  `claude` runtime, so you do **not** need to install Claude Code separately.
-
-**2. Install**
-
-```bash
-pip install git+https://github.com/weathon/ideacheck.git
-```
-
-(or clone and `pip install -e .` for development.)
-
-**3. Authenticate Claude** — pick either:
-
-- **Reuse a Claude Code login:** if you have ever logged into
-  [Claude Code](https://claude.com/claude-code) on this machine, ideacheck reuses
-  that session automatically — nothing to set.
-- **API key:** otherwise export a key:
-  ```bash
-  export ANTHROPIC_API_KEY=sk-ant-...
-  ```
-
-**4. alphaXiv** needs no setup — search/paper/overview/similar endpoints are
-queried publicly, **no alphaXiv API key required**.
-
-> Cost: a run uses Sonnet (agents) + Haiku (overviews) + one Opus pass (the
-> method-advisor). A broad idea that surfaces dozens of papers can cost a few
-> dollars per run; a niche idea is cheaper. The run prints its cost at the end —
-> shown as **saved** (the equivalent API cost, $0 on a Claude subscription) or
-> **billed** (when `ANTHROPIC_API_KEY` is set). Generated overviews are cached
-> under `~/.ideacheck/overview_cache/` and reused across runs.
-
-## Usage
-
 ### Option A: Claude Code Skill (recommended)
 
-If you use [Claude Code](https://claude.com/claude-code), ideacheck is available
-as a built-in `/ideacheck` slash command. No `pip install` needed — just the
-`axv.py` and `render.py` scripts in this directory plus the skill file at
-`.claude/commands/ideacheck.md` in the parent repo.
+Clone this repo and `cd` into it (or add it as a submodule). The `/ideacheck`
+slash command is available automatically — Claude Code picks up
+`.claude/commands/ideacheck.md` from the working directory.
+
+```bash
+git clone https://github.com/weathon/ideacheck.git
+cd ideacheck
+pip install alphaxiv-py    # the only runtime dependency
+```
+
+Then inside Claude Code:
 
 ```
 /ideacheck a diffusion model that edits 3D scenes from natural-language instructions
@@ -93,22 +64,38 @@ The skill orchestrates everything via subagents:
 3. **Paper-analyst subagents** — one per paper, spawned IN PARALLEL, each calls `axv.py` CLI tools
 4. **Method-advisor subagent** (Opus) — in-depth method improvement analysis
 5. **Synthesis** — final novelty verdict + report JSON
-6. **Render** — calls `python ideacheck/render.py` to produce `report.md` + `report.html`
+6. **Render** — calls `python render.py` to produce `report.md` + `report.html`
 
-The CLI tools used by the subagents:
+The CLI tools can also be used standalone:
 
 ```bash
-python ideacheck/axv.py search "query" [--before YYYY-MM-DD]   # search papers
-python ideacheck/axv.py topics "query"                          # discover vocabulary
-python ideacheck/axv.py paper <arxiv_id>                        # paper metadata
-python ideacheck/axv.py overview <arxiv_id>                     # structured overview (cached)
-python ideacheck/axv.py fulltext <arxiv_id>                     # full extracted text
-python ideacheck/axv.py similar <arxiv_id>                      # similar papers
-python ideacheck/axv.py save-overview <json_file>               # cache a generated overview
-python ideacheck/render.py <run_dir>                            # JSON → report.md + report.html
+python axv.py search "query" [--before YYYY-MM-DD]   # search papers
+python axv.py topics "query"                          # discover vocabulary
+python axv.py paper <arxiv_id>                        # paper metadata
+python axv.py overview <arxiv_id>                     # structured overview (cached)
+python axv.py fulltext <arxiv_id>                     # full extracted text
+python axv.py similar <arxiv_id>                      # similar papers
+python axv.py save-overview <json_file>               # cache a generated overview
+python render.py <run_dir>                            # JSON → report.md + report.html
 ```
 
+**Requirements:** Python ≥ 3.12, `alphaxiv-py` (`pip install alphaxiv-py`).
+No API key needed for alphaXiv (public endpoints). Claude Code handles
+authentication automatically.
+
+> Cost: a run uses Sonnet (subagents) + one Opus pass (method-advisor).
+> A broad idea with dozens of papers costs a few dollars; a niche idea is
+> cheaper. Generated overviews are cached under `~/.ideacheck/overview_cache/`
+> and reused across runs.
+
 ### Option B: Standalone CLI (Python package)
+
+The repo also ships as a pip-installable Python package with its own CLI +
+web GUI (uses the Claude Agent SDK directly, not Claude Code).
+
+```bash
+pip install git+https://github.com/weathon/ideacheck.git
+```
 
 ```bash
 ideacheck check "a diffusion model that edits 3D scenes from natural-language instructions"
