@@ -52,31 +52,45 @@ pip install alphaxiv-py
 
 ### 2. Install the skill into your project
 
-Clone this repo (or add as a submodule), then copy the skill file and CLI
-tools into your project:
+Clone this repo, then copy `axv.py`, `render.py`, and the skill file into
+your project. The skill file (`ideacheck.md`) is a plain markdown prompt —
+put it wherever your harness looks for custom commands:
 
 ```bash
 git clone https://github.com/weathon/ideacheck.git
+cd /path/to/your/project
 
-# copy the skill into your project's .claude/commands/
-mkdir -p /path/to/your/project/.claude/commands
-cp ideacheck/.claude/commands/ideacheck.md /path/to/your/project/.claude/commands/
-
-# copy the CLI tools somewhere on your project path
-cp ideacheck/axv.py ideacheck/render.py /path/to/your/project/
+# copy the CLI tools
+cp /path/to/ideacheck/axv.py /path/to/ideacheck/render.py .
 ```
 
-Or with a symlink (stays in sync with upstream):
+Then install the skill file for your harness:
+
+| Harness | Where to put `ideacheck.md` |
+|---------|---------------------------|
+| **Claude Code** | `.claude/commands/ideacheck.md` |
+| **Cursor** | `.cursor/prompts/ideacheck.md` (or paste into Rules) |
+| **Windsurf** | `.windsurfrules/ideacheck.md` (or paste into Rules) |
+| **Codex (OpenAI)** | `AGENTS.md` or `codex.md` (paste the content) |
+| **Aider** | `.aider.conf.yml` conventions file (paste the content) |
+| **Other / generic** | Paste the content of `ideacheck.md` directly into your harness's system prompt or rules file |
+
+Example for Claude Code:
 
 ```bash
-ln -s /absolute/path/to/ideacheck/.claude/commands/ideacheck.md \
-      /path/to/your/project/.claude/commands/ideacheck.md
-ln -s /absolute/path/to/ideacheck/axv.py /path/to/your/project/axv.py
-ln -s /absolute/path/to/ideacheck/render.py /path/to/your/project/render.py
+mkdir -p .claude/commands
+cp /path/to/ideacheck/.claude/commands/ideacheck.md .claude/commands/
 ```
 
 The skill expects `axv.py` and `render.py` in the working directory. If you
 place them elsewhere, edit the paths in your copy of `ideacheck.md`.
+
+> **Note:** The skill file is harness-agnostic. It contains the full workflow,
+> CLI tool docs, JSON schemas, and agent prompts as plain text. Any harness
+> that can read a markdown prompt and run shell commands can execute it. The
+> `$ARGUMENTS` placeholder on line 1 is a Claude Code convention — other
+> harnesses should replace it with the user's idea text, or just paste the
+> idea at the top.
 
 ### 3. Use it
 
