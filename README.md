@@ -178,6 +178,34 @@ This tool is token-intensive. Ways to reduce cost:
 3. **Overviews are cached.** After the first run, `~/.ideacheck/overview_cache/`
    stores generated overviews — repeat runs on similar ideas reuse them.
 
+## Companion: paper-podcast
+
+This repo also ships [`paper-podcast/`](paper-podcast/) — a skill that turns a
+set of paper PDFs into a single-person, "read-paper-with-me" audio walkthrough.
+It fans out one subagent per section, budgets each section's length from a
+target runtime, and optionally renders the script to MP3 via OpenRouter Gemini
+TTS.
+
+It pairs naturally with ideacheck: run ideacheck first to find the papers that
+matter for your idea (the **Recommended reading** list ranks them by value to
+*your* paper), then feed those PDFs to paper-podcast to get up to speed by
+listening instead of reading. ideacheck tells you *what* to read; paper-podcast
+makes it easy to actually go through it.
+
+```bash
+# 1. find the papers worth reading for your idea
+/ideacheck a diffusion model that edits 3D scenes from natural-language instructions
+
+# 2. turn the top recommended PDFs into a spoken walkthrough
+#    (install paper-podcast/SKILL.md into your harness, then:)
+/paper-podcast make a 20-minute expert walkthrough of these papers
+```
+
+Install it the same way as the ideacheck skill — drop `paper-podcast/SKILL.md`
+where your harness looks for skills. Audio rendering needs `ffmpeg` and an
+OpenRouter API key. See [`paper-podcast/SKILL.md`](paper-podcast/SKILL.md) for
+the full workflow.
+
 ## Configuration (standalone CLI)
 
 Models are set via environment variables:
