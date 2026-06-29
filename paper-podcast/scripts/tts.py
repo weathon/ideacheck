@@ -16,7 +16,7 @@ Usage:
   python tts.py INPUT.md -o OUT.mp3 --voice Zephyr
   python tts.py INPUT.md            # -> INPUT.mp3, default voice Zephyr
   python tts.py INPUT.md --concurrency 16
-Key resolution order: --key  >  $OPENROUTER_API_KEY  >  ~/realtime_stream/.env
+Key resolution order: --key  >  $OPENROUTER_API_KEY
 """
 import argparse, os, re, sys, time, subprocess, threading
 from pathlib import Path
@@ -31,12 +31,7 @@ def load_key(cli_key):
         return cli_key
     if os.environ.get("OPENROUTER_API_KEY"):
         return os.environ["OPENROUTER_API_KEY"]
-    envp = Path.home() / "realtime_stream/.env"
-    if envp.exists():
-        for line in envp.read_text().splitlines():
-            if line.startswith("OPENROUTER_API_KEY") and "=" in line:
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    sys.exit("No key: pass --key, set $OPENROUTER_API_KEY, or add OPENROUTER_API_KEY to ~/realtime_stream/.env")
+    sys.exit("No key: pass --key or set $OPENROUTER_API_KEY")
 
 
 def chunk_text(text, maxc):

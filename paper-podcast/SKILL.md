@@ -45,7 +45,7 @@ Run `scripts/tts.py`:
 ```bash
 python scripts/tts.py podcast.md -o podcast.mp3 --voice Zephyr --concurrency 10
 ```
-Key resolution: `--key` → `$OPENROUTER_API_KEY` → `OPENROUTER_API_KEY` line in `~/realtime_stream/.env`.
+The script needs an OpenRouter API key. **Ask the user** where their key is (env var, `.env` file path, or paste) — do not assume a hardcoded path. Pass it via `--key` or export `OPENROUTER_API_KEY` before running. Key resolution: `--key` → `$OPENROUTER_API_KEY`.
 
 Chunks are fetched **concurrently** (`--concurrency`, default 10) with a live progress bar on stderr (done/total, elapsed, ETA); the PCM is still concatenated in chunk order so output is identical to a serial run. Raise concurrency for long scripts; lower it if you hit rate limits.
 
