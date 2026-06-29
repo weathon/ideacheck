@@ -29,7 +29,7 @@ Also honor a **focus area** if the user names one (→ `FOCUS`). If they already
    - `TOPIC`, `AUDIENCE` — framing/register. For "read-paper-with-me / expert" asks, keep the default expert audience string.
    - `TARGET_MINUTES` — the user's target runtime. The script computes `TOTAL_WORDS = TARGET_MINUTES * WPM` and hands every section a slice of that budget. **WPM ≈ 167** for the current Gemini TTS voice (measured: file `wc -w` ÷ audio minutes; recalibrate if you change voice/model). So ~20 min ≈ 3300 words, ~40 min ≈ 6700 words.
    - `FOCUS` — optional. A topic the user is most interested in (e.g. "how the data is collected and how the model is trained"). Sections the outliner marks as matching get `FOCUS_WEIGHT`× the word budget, so the episode dwells there while still covering the rest. Leave `""` for even coverage.
-3. **Run** it: `Workflow({ scriptPath: "<your copy>.js" })`. Three phases: outline each PDF (one subagent per paper → sections + page ranges), then write each section (one subagent per section, in parallel, each reads only its pages), then one stitch agent assembles intro/outro + bridges. It runs in the background and notifies on completion. `/workflows` shows live per-section progress.
+3. **Run** it: `Workflow({ scriptPath: "<your copy>.js" })`. Three phases: outline each PDF (one subagent per paper → sections + page ranges), then write each section (one subagent per section, in parallel, each reads only its pages), then one stitch agent assembles intro/outro + bridges. All subagents use `model: 'sonnet'` for speed. It runs in the background and notifies on completion. `/workflows` shows live per-section progress.
 4. **Extract the script** from the result JSON to a `.md`:
    ```python
    import json

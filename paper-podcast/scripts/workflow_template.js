@@ -66,7 +66,7 @@ const outlines = await parallel(FILES.map((f, i) => () =>
     `Produce an ordered sectioning suited to a spoken "read-paper-with-me" episode for ${AUDIENCE}. ` +
     `For each section give a page range, dense technical notes (real numbers only, never invented), and set focusMatch. ` +
     (FOCUS ? `FOCUS topic = "${FOCUS}". Mark focusMatch=true for sections squarely about it; you may split the paper finer there so those parts can get more airtime.` : `No focus topic; aim for even coverage.`),
-    { label: `outline:${f.split('/').pop()}`, phase: 'Outline', schema: OUTLINE_SCHEMA }
+    { label: `outline:${f.split('/').pop()}`, phase: 'Outline', schema: OUTLINE_SCHEMA, model: 'sonnet' }
   )
 ))
 
@@ -96,7 +96,7 @@ const written = await parallel(sections.map((s, idx) => () =>
     `Not casual, no public-facing hand-holding, but spoken-word continuous prose (no bullet lists, no math symbols spelled as LaTeX). ` +
     `Write ONLY the body of your section as flowing narration. Do NOT add an intro/outro or a section header — the stitcher handles those. ` +
     `Do not restate the paper's whole thesis; assume earlier sections set it up.`,
-    { label: `write:${s.title}`.slice(0, 60), phase: 'Write' }
+    { label: `write:${s.title}`.slice(0, 60), phase: 'Write', model: 'sonnet' }
   )
 ))
 
@@ -115,7 +115,7 @@ const script = await agent(
   `- Keep section headers as [bracketed] lines (the TTS step strips these so they are silent).\n` +
   `- Spoken-word prose only: no bullet lists, no markdown tables, no LaTeX.\n\n` +
   `=== SECTIONS ===\n${assembled}`,
-  { label: 'stitch', phase: 'Stitch' }
+  { label: 'stitch', phase: 'Stitch', model: 'sonnet' }
 )
 
 return { script, target_minutes: TARGET_MINUTES, target_words: TOTAL_WORDS, sections: sections.map(s => ({ title: s.title, words: s.words, focus: !!s.focusMatch })) }
